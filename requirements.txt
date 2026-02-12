@@ -1,0 +1,17 @@
+# Core Libraries
+streamlit
+playwright
+yt-dlp
+moviepy
+openai
+instagrapi
+python-telegram-bot
+requests
+toml
+
+# Dependencies (often installed automatically, but good to specify)
+numpy
+pandas
+
+# For Coupang Partners API
+PyJWT
