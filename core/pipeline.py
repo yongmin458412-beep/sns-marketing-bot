@@ -17,6 +17,7 @@ from config import (
     ALIEXPRESS_KEYWORD_POOL,
     ALIEXPRESS_VIDEO_FIRST, VIDEO_FIRST_MIN_VIDEOS, VIDEO_FIRST_MAX_VIDEOS,
     TREND_FALLBACK_KEYWORDS,
+    BRAND_MODEL_ENRICH,
 )
 from core.sourcing import ProductSourcer
 from core.mining import VideoMiner
@@ -493,11 +494,17 @@ class AutomationPipeline:
                     yield kw
             # 한 바퀴 돌면 다시 새로운 배치를 만들어 계속 반복
 
-    @staticmethod
-    def _build_video_first_keywords(seed_keyword: str | None) -> list[str]:
+    def _build_video_first_keywords(self, seed_keyword: str | None) -> list[str]:
         keys: list[str] = []
         if seed_keyword:
-            keys.append(seed_keyword)
+            if BRAND_MODEL_ENRICH:
+                expanded = self.sourcer.expand_brand_model_keywords(seed_keyword)
+                if expanded:
+                    keys.extend(expanded)
+                else:
+                    keys.append(seed_keyword)
+            else:
+                keys.append(seed_keyword)
         # 생활용품 풀 + 트렌드 + fallback
         keys.extend(ALIEXPRESS_KEYWORD_POOL or [])
         keys.extend(get_daily_trend_keywords() or [])

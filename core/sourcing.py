@@ -7,6 +7,7 @@ import json
 import base64
 import logging
 import asyncio
+from datetime import datetime, timedelta
 from typing import Optional
 from pathlib import Path
 
@@ -19,6 +20,7 @@ from config import (
     OPENAI_API_KEY, COUPANG_GOLDBOX_URL, COUPANG_RANKING_URL,
     VISION_PROMPT, MAX_PRODUCTS_PER_RUN, DOWNLOADS_DIR,
     ALIEXPRESS_EXCLUDE_KEYWORDS,
+    DATA_DIR, BRAND_MODEL_ENRICH, BRAND_MODEL_CACHE_DAYS, GENERIC_KEYWORDS,
 )
 from core.database import insert_product, update_product_code
 from core.aliexpress_api import AliExpressClient
@@ -30,7 +32,7 @@ class ProductSourcer:
     """쿠팡 상품 소싱 클래스"""
 
     def __init__(self):
-        self.client = OpenAI(api_key=OPENAI_API_KEY)
+        self.client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
         self.aliexpress = AliExpressClient()
         self.headers = {
             "User-Agent": (
@@ -40,6 +42,7 @@ class ProductSourcer:
             ),
             "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
         }
+        self._brand_model_cache_path = DATA_DIR / "brand_model_cache.json"
 
     # ──────────────────────────────────────────
     # 크롤링 (Playwright 기반)
@@ -250,6 +253,8 @@ class ProductSourcer:
             else:
                 raise ValueError("image_url 또는 image_path 중 하나를 제공해야 합니다.")
 
+            if not self.client:
+                raise RuntimeError("OpenAI API 키 미설정")
             response = self.client.chat.completions.create(
                 model="gpt-4o",
                 messages=messages,
@@ -270,6 +275,8 @@ class ProductSourcer:
         상품명으로 영문명 + 키워드 추출 (이미지 없을 때 폴백)
         """
         try:
+            if not self.client:
+                raise RuntimeError("OpenAI API 키 미설정")
             response = self.client.chat.completions.create(
                 model="gpt-4o",
                 messages=[{
@@ -293,6 +300,112 @@ class ProductSourcer:
         except Exception as e:
             logger.error(f"텍스트 분석 실패: {e}")
             return {"product_name": product_name, "keywords": [product_name]}
+
+    def expand_brand_model_keywords(self, keyword: str,
+                                    max_items: int = 6) -> list[str]:
+        """
+        일반 키워드를 브랜드/모델명 포함 검색어로 확장
+        """
+        keyword = (keyword or "").strip()
+        if not keyword:
+            return []
+        if not BRAND_MODEL_ENRICH:
+            return [keyword]
+        if not self._is_generic_keyword(keyword):
+            return [keyword]
+
+        cached = self._load_brand_model_cache(keyword)
+        if cached:
+            return cached[:max_items]
+
+        if not self.client:
+            return [keyword]
+
+        prompt = (
+            "다음 키워드를 '브랜드+모델명' 형태의 검색어로 5~8개 만들어줘.\n"
+            "조건:\n"
+            "- 각 항목은 브랜드명 + 모델명(또는 라인명)이 포함되어야 함\n"
+            "- 너무 일반적인 단어는 제외\n"
+            "- 한국어/영어 혼용 가능\n"
+            "- JSON 배열로만 출력\n\n"
+            f"키워드: {keyword}"
+        )
+        try:
+            response = self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=300,
+                temperature=0.7
+            )
+            content = response.choices[0].message.content.strip()
+            items = []
+            try:
+                items = json.loads(content)
+            except Exception:
+                # 라인 분리 폴백
+                items = [line.strip("-• ").strip() for line in content.split("\n") if line.strip()]
+
+            # 정리
+            cleaned = []
+            seen = set()
+            for it in items:
+                if not it:
+                    continue
+                text = str(it).strip()
+                if len(text) < 3:
+                    continue
+                key = text.lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                cleaned.append(text)
+
+            if cleaned:
+                self._save_brand_model_cache(keyword, cleaned)
+                return cleaned[:max_items]
+        except Exception as e:
+            logger.warning(f"브랜드/모델 키워드 확장 실패: {e}")
+
+        return [keyword]
+
+    @staticmethod
+    def _is_generic_keyword(keyword: str) -> bool:
+        key = (keyword or "").strip().lower()
+        return key in [k.lower() for k in GENERIC_KEYWORDS if k]
+
+    def _load_brand_model_cache(self, keyword: str) -> list[str]:
+        try:
+            if not self._brand_model_cache_path.exists():
+                return []
+            with open(self._brand_model_cache_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            item = data.get(keyword)
+            if not item:
+                return []
+            ts = item.get("ts")
+            if ts:
+                dt = datetime.fromisoformat(ts)
+                if datetime.now() - dt > timedelta(days=BRAND_MODEL_CACHE_DAYS):
+                    return []
+            return item.get("items", []) or []
+        except Exception:
+            return []
+
+    def _save_brand_model_cache(self, keyword: str, items: list[str]):
+        try:
+            data = {}
+            if self._brand_model_cache_path.exists():
+                with open(self._brand_model_cache_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            data[keyword] = {
+                "ts": datetime.now().isoformat(),
+                "items": items
+            }
+            self._brand_model_cache_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(self._brand_model_cache_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False)
+        except Exception as e:
+            logger.warning(f"브랜드/모델 캐시 저장 실패: {e}")
 
     # ──────────────────────────────────────────
     # 통합 파이프라인

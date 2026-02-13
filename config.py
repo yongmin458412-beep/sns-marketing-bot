@@ -150,6 +150,16 @@ ALIEXPRESS_EXCLUDE_KEYWORDS = _split_csv(
     )
 )
 
+# 브랜드/모델명 키워드 확장 (예: '샴푸' -> 특정 브랜드/모델명)
+BRAND_MODEL_ENRICH = get_secret("BRAND_MODEL_ENRICH", "true").lower() == "true"
+BRAND_MODEL_CACHE_DAYS = int(get_secret("BRAND_MODEL_CACHE_DAYS", "7") or 7)
+GENERIC_KEYWORDS = _split_csv(
+    get_secret(
+        "GENERIC_KEYWORDS",
+        "샴푸"
+    )
+)
+
 # ──────────────────────────────────────────────
 # 크롤링 / 필터 설정
 # ──────────────────────────────────────────────
