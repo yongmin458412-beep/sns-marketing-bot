@@ -18,6 +18,8 @@ from config import (
     DOWNLOADS_DIR,
     IG_GRAPH_API_VERSION, IG_GRAPH_HOST, IG_USER_ID, IG_ACCESS_TOKEN,
     IG_MINING_ENABLED, IG_MINING_TOP_MEDIA, IG_MINING_MAX_RESULTS,
+    YTDLP_USER_AGENT, YTDLP_REFERER, YTDLP_EXTRACTOR_ARGS,
+    YTDLP_COOKIES_FILE, YTDLP_RETRIES, YTDLP_SLEEP_INTERVAL, YTDLP_MAX_SLEEP_INTERVAL,
 )
 from core.database import insert_video, is_url_processed
 
@@ -276,11 +278,24 @@ class VideoMiner:
                 "--no-playlist",
                 "--no-warnings",
                 "--quiet",
+                "--user-agent", YTDLP_USER_AGENT,
+                "--referer", YTDLP_REFERER,
+                "--extractor-args", YTDLP_EXTRACTOR_ARGS,
+                "--retries", str(YTDLP_RETRIES),
+                "--sleep-interval", str(YTDLP_SLEEP_INTERVAL),
+                "--max-sleep-interval", str(YTDLP_MAX_SLEEP_INTERVAL),
+                "--geo-bypass",
             ]
 
             # TikTok 워터마크 제거 시도
             if "tiktok" in url.lower():
                 cmd.extend(["--extractor-args", "tiktok:api_hostname=api22-normal-c-useast2a.tiktokv.com"])
+                cmd.extend(["--referer", "https://www.tiktok.com/"])
+
+            if YTDLP_COOKIES_FILE:
+                cookies_path = Path(YTDLP_COOKIES_FILE)
+                if cookies_path.exists():
+                    cmd.extend(["--cookies", str(cookies_path)])
 
             cmd.append(url)
 

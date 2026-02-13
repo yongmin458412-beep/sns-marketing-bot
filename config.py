@@ -172,6 +172,19 @@ MIN_LIKE_COUNT = int(get_secret("MIN_LIKE_COUNT", "200") or 200)      # 최소 �
 MIN_DURATION = int(get_secret("MIN_DURATION", "5") or 5)             # 최소 영상 길이 (초)
 MAX_DURATION = int(get_secret("MAX_DURATION", "90") or 90)            # 최대 영상 길이 (초)
 
+# yt-dlp 다운로드 옵션
+YTDLP_USER_AGENT = get_secret(
+    "YTDLP_USER_AGENT",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
+YTDLP_REFERER = get_secret("YTDLP_REFERER", "https://www.youtube.com/")
+YTDLP_EXTRACTOR_ARGS = get_secret("YTDLP_EXTRACTOR_ARGS", "youtube:player_client=android")
+YTDLP_COOKIES_FILE = get_secret("YTDLP_COOKIES_FILE", "")
+YTDLP_RETRIES = int(get_secret("YTDLP_RETRIES", "3") or 3)
+YTDLP_SLEEP_INTERVAL = int(get_secret("YTDLP_SLEEP_INTERVAL", "1") or 1)
+YTDLP_MAX_SLEEP_INTERVAL = int(get_secret("YTDLP_MAX_SLEEP_INTERVAL", "5") or 5)
+
 # ──────────────────────────────────────────────
 # 영상 편집 설정
 # ──────────────────────────────────────────────
