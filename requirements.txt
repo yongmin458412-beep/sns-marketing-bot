@@ -11,6 +11,7 @@ toml
 python-aliexpress-api
 pytrends
 notion-client
+cloudinary
 
 # Dependencies (often installed automatically, but good to specify)
 numpy

@@ -188,7 +188,8 @@ class AutomationPipeline:
                             video_path=video["edited_path"],
                             product_name=product_name,
                             product_id=product.get("id"),
-                            video_id=video.get("id")
+                            video_id=video.get("id"),
+                            product_code=product.get("product_code", "")
                         )
 
                         if media_id:

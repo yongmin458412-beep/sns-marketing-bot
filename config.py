@@ -88,6 +88,25 @@ TELEGRAM_CHAT_ID = get_secret("TELEGRAM_CHAT_ID")
 INSTAGRAM_USERNAME = get_secret("INSTAGRAM_USERNAME")
 INSTAGRAM_PASSWORD = get_secret("INSTAGRAM_PASSWORD")
 
+# Instagram Graph API (공식 API)
+IG_API_MODE = get_secret("IG_API_MODE", "graph")  # graph | instagrapi | disabled
+IG_GRAPH_API_VERSION = get_secret("IG_GRAPH_API_VERSION", "v20.0")
+IG_GRAPH_HOST = get_secret("IG_GRAPH_HOST", "graph.facebook.com")
+IG_MESSAGE_HOST = get_secret("IG_MESSAGE_HOST", "graph.facebook.com")
+IG_USER_ID = get_secret("IG_USER_ID")
+IG_ACCESS_TOKEN = get_secret("IG_ACCESS_TOKEN")
+IG_SHARE_TO_FEED = get_secret("IG_SHARE_TO_FEED", "false").lower() == "true"
+IG_CONTAINER_POLL_INTERVAL = int(get_secret("IG_CONTAINER_POLL_INTERVAL", "3") or 3)
+IG_CONTAINER_POLL_TIMEOUT = int(get_secret("IG_CONTAINER_POLL_TIMEOUT", "120") or 120)
+
+# 영상 공개 URL 생성(그래프 API 업로드용)
+VIDEO_HOSTING = get_secret("VIDEO_HOSTING", "cloudinary")  # cloudinary | public_url | none
+VIDEO_PUBLIC_BASE_URL = get_secret("VIDEO_PUBLIC_BASE_URL")  # public_url 모드일 때 사용
+CLOUDINARY_CLOUD_NAME = get_secret("CLOUDINARY_CLOUD_NAME")
+CLOUDINARY_API_KEY = get_secret("CLOUDINARY_API_KEY")
+CLOUDINARY_API_SECRET = get_secret("CLOUDINARY_API_SECRET")
+CLOUDINARY_FOLDER = get_secret("CLOUDINARY_FOLDER", "sns-marketing-bot")
+
 COUPANG_ACCESS_KEY = get_secret("COUPANG_ACCESS_KEY")
 COUPANG_SECRET_KEY = get_secret("COUPANG_SECRET_KEY")
 COUPANG_PARTNER_ID = get_secret("COUPANG_PARTNER_ID")

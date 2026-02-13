@@ -272,6 +272,19 @@ def mark_interaction_replied(interaction_id: int, dm_sent: bool = False):
     conn.close()
 
 
+def is_comment_processed(comment_id: str) -> bool:
+    """이미 처리된 댓글인지 확인"""
+    if not comment_id:
+        return False
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT 1 FROM interactions WHERE comment_id = ? LIMIT 1",
+        (comment_id,)
+    ).fetchone()
+    conn.close()
+    return row is not None
+
+
 def start_run_log(run_type: str = "auto") -> int:
     """실행 로그 시작"""
     conn = get_connection()

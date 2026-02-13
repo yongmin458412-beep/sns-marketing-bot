@@ -21,7 +21,10 @@ from config import (
     ALIEXPRESS_APP_KEY, ALIEXPRESS_APP_SECRET, ALIEXPRESS_TRACKING_ID,
     LINKTREE_MODE, LINKTREE_WEBHOOK_URL,
     TREND_SOURCE, TREND_GEO,
-    NOTION_TOKEN, NOTION_DATABASE_ID, NOTION_PUBLIC_URL
+    NOTION_TOKEN, NOTION_DATABASE_ID, NOTION_PUBLIC_URL,
+    IG_API_MODE, IG_USER_ID, IG_ACCESS_TOKEN,
+    VIDEO_HOSTING, CLOUDINARY_CLOUD_NAME, VIDEO_PUBLIC_BASE_URL,
+    INSTAGRAM_PASSWORD
 )
 from core.database import get_stats, get_recent_logs, get_connection
 from core.pipeline import AutomationPipeline
@@ -67,10 +70,18 @@ with st.sidebar:
         else:
             st.error("Telegram ✗")
 
-    if INSTAGRAM_USERNAME:
-        st.success(f"Instagram: @{INSTAGRAM_USERNAME}")
+    if IG_API_MODE == "graph":
+        if IG_USER_ID and IG_ACCESS_TOKEN:
+            st.success("Instagram Graph API ✓")
+        else:
+            st.error("Instagram Graph API ✗")
+    elif IG_API_MODE == "instagrapi":
+        if INSTAGRAM_USERNAME:
+            st.success(f"Instagram: @{INSTAGRAM_USERNAME}")
+        else:
+            st.warning("Instagram: 미설정")
     else:
-        st.warning("Instagram: 미설정")
+        st.warning("Instagram API: 비활성화")
 
 
 # ──────────────────────────────────────────────
@@ -403,8 +414,14 @@ elif page == "⚙️ 설정":
     settings = {
         "OpenAI API Key": "✅ 설정됨" if OPENAI_API_KEY else "❌ 미설정",
         "Telegram Bot Token": "✅ 설정됨" if TELEGRAM_BOT_TOKEN else "❌ 미설정",
+        "Instagram API Mode": IG_API_MODE or "미설정",
         "Instagram Username": INSTAGRAM_USERNAME or "❌ 미설정",
-        "Instagram Password": "✅ 설정됨" if INSTAGRAM_USERNAME else "❌ 미설정",
+        "Instagram Password": "✅ 설정됨" if INSTAGRAM_PASSWORD else "❌ 미설정",
+        "IG User ID": "✅ 설정됨" if IG_USER_ID else "❌ 미설정",
+        "IG Access Token": "✅ 설정됨" if IG_ACCESS_TOKEN else "❌ 미설정",
+        "Video Hosting": VIDEO_HOSTING or "미설정",
+        "Cloudinary": "✅ 설정됨" if CLOUDINARY_CLOUD_NAME else "❌ 미설정",
+        "Public Video URL Base": VIDEO_PUBLIC_BASE_URL or "❌ 미설정",
         "AliExpress App Key": "✅ 설정됨" if ALIEXPRESS_APP_KEY else "❌ 미설정",
         "AliExpress App Secret": "✅ 설정됨" if ALIEXPRESS_APP_SECRET else "❌ 미설정",
         "AliExpress Tracking ID": "✅ 설정됨" if ALIEXPRESS_TRACKING_ID else "❌ 미설정",
@@ -466,6 +483,23 @@ TELEGRAM_BOT_TOKEN = "123456:ABC-DEF..."
 TELEGRAM_CHAT_ID = "123456789"
 INSTAGRAM_USERNAME = "your_username"
 INSTAGRAM_PASSWORD = "your_password"
+
+# Instagram Graph API (권장)
+IG_API_MODE = "graph"  # graph | instagrapi | disabled
+IG_GRAPH_API_VERSION = "v20.0"
+IG_GRAPH_HOST = "graph.facebook.com"
+IG_MESSAGE_HOST = "graph.facebook.com"
+IG_USER_ID = "your_ig_user_id"
+IG_ACCESS_TOKEN = "your_long_lived_access_token"
+IG_SHARE_TO_FEED = "false"
+
+# Video Hosting (Graph API 업로드용)
+VIDEO_HOSTING = "cloudinary"  # cloudinary | public_url | none
+VIDEO_PUBLIC_BASE_URL = "https://your-public-video-host.com/videos"
+CLOUDINARY_CLOUD_NAME = "your_cloud_name"
+CLOUDINARY_API_KEY = "your_cloudinary_api_key"
+CLOUDINARY_API_SECRET = "your_cloudinary_api_secret"
+CLOUDINARY_FOLDER = "sns-marketing-bot"
 COUPANG_ACCESS_KEY = "your_access_key"
 COUPANG_SECRET_KEY = "your_secret_key"
 COUPANG_PARTNER_ID = "your_partner_id"
