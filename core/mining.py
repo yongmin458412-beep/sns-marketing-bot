@@ -8,6 +8,7 @@ import logging
 import subprocess
 import re
 import requests
+import base64
 from pathlib import Path
 from typing import Optional
 
@@ -19,7 +20,8 @@ from config import (
     IG_GRAPH_API_VERSION, IG_GRAPH_HOST, IG_USER_ID, IG_ACCESS_TOKEN,
     IG_MINING_ENABLED, IG_MINING_TOP_MEDIA, IG_MINING_MAX_RESULTS,
     YTDLP_USER_AGENT, YTDLP_REFERER, YTDLP_EXTRACTOR_ARGS,
-    YTDLP_COOKIES_FILE, YTDLP_RETRIES, YTDLP_SLEEP_INTERVAL, YTDLP_MAX_SLEEP_INTERVAL,
+    YTDLP_COOKIES_FILE, YTDLP_COOKIES_BASE64, YTDLP_RETRIES, YTDLP_SLEEP_INTERVAL, YTDLP_MAX_SLEEP_INTERVAL,
+    DATA_DIR,
 )
 from core.database import insert_video, is_url_processed
 
@@ -40,6 +42,7 @@ class VideoMiner:
             "women", "woman", "men", "man", "kids", "girls", "boys",
             "세트", "포함", "남성", "여성", "용", "및",
         ])
+        self._cookies_path = None
 
     # ──────────────────────────────────────────
     # YouTube Shorts 검색
@@ -270,6 +273,7 @@ class VideoMiner:
         output_path = self.download_dir / f"{filename}.mp4"
 
         try:
+            cookies_path = self._ensure_cookies_file()
             cmd = [
                 "yt-dlp",
                 "-f", "best[ext=mp4]/best",
@@ -292,10 +296,8 @@ class VideoMiner:
                 cmd.extend(["--extractor-args", "tiktok:api_hostname=api22-normal-c-useast2a.tiktokv.com"])
                 cmd.extend(["--referer", "https://www.tiktok.com/"])
 
-            if YTDLP_COOKIES_FILE:
-                cookies_path = Path(YTDLP_COOKIES_FILE)
-                if cookies_path.exists():
-                    cmd.extend(["--cookies", str(cookies_path)])
+            if cookies_path:
+                cmd.extend(["--cookies", str(cookies_path)])
 
             cmd.append(url)
 
@@ -317,6 +319,37 @@ class VideoMiner:
 
         except subprocess.TimeoutExpired:
             logger.error(f"다운로드 타임아웃: {url}")
+            return None
+
+    def _ensure_cookies_file(self) -> Optional[Path]:
+        """
+        secrets에 base64로 넣은 cookies.txt를 파일로 생성
+        """
+        if self._cookies_path is not None:
+            return self._cookies_path
+
+        if YTDLP_COOKIES_FILE:
+            path = Path(YTDLP_COOKIES_FILE)
+            if path.exists():
+                self._cookies_path = path
+                return path
+
+        if not YTDLP_COOKIES_BASE64:
+            self._cookies_path = None
+            return None
+
+        try:
+            DATA_DIR.mkdir(parents=True, exist_ok=True)
+            path = DATA_DIR / "cookies.txt"
+            if not path.exists():
+                decoded = base64.b64decode(YTDLP_COOKIES_BASE64.encode("utf-8"))
+                with open(path, "wb") as f:
+                    f.write(decoded)
+            self._cookies_path = path
+            return path
+        except Exception as e:
+            logger.warning(f"cookies.txt 생성 실패: {e}")
+            self._cookies_path = None
             return None
         except Exception as e:
             logger.error(f"다운로드 실패: {e}")
