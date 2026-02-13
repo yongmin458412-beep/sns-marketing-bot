@@ -10,13 +10,25 @@ from pathlib import Path
 
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from config import MAX_PRODUCTS_PER_RUN, COMMENT_POLL_INTERVAL
+from config import (
+    MAX_PRODUCTS_PER_RUN, COMMENT_POLL_INTERVAL,
+    MAX_DAILY_PRODUCTS, ALIEXPRESS_DEFAULT_KEYWORD
+)
 from core.sourcing import ProductSourcer
 from core.mining import VideoMiner
 from core.editing import VideoEditor
 from core.social import InstagramManager
 from core.bot import TelegramNotifier
-from core.database import start_run_log, finish_run_log
+from core.linktree import LinktreeManager
+from core.notion_links import NotionLinkManager
+from core.trends import get_daily_trend_keyword
+from core.database import (
+    start_run_log, finish_run_log,
+    get_today_product_count,
+    update_product_affiliate_link,
+    update_product_linktree,
+    update_product_notion,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -30,11 +42,15 @@ class AutomationPipeline:
         self.editor = VideoEditor()
         self.social = InstagramManager()
         self.notifier = TelegramNotifier()
+        self.linktree = LinktreeManager()
+        self.notion = NotionLinkManager()
 
     async def run_full_pipeline(self, source_url: str = None,
                                 max_products: int = None,
                                 monitor_comments: bool = True,
-                                monitor_duration: int = 30) -> dict:
+                                monitor_duration: int = 30,
+                                source: str = "aliexpress",
+                                keyword: str = None) -> dict:
         """
         전체 자동화 파이프라인 실행
 
@@ -59,9 +75,32 @@ class AutomationPipeline:
             logger.info("전체 자동화 파이프라인 시작")
             logger.info("=" * 60)
 
+            # ── DAILY LIMIT ──
+            today_count = get_today_product_count()
+            remaining = max(0, MAX_DAILY_PRODUCTS - today_count)
+            if remaining <= 0:
+                msg = f"하루 최대 상품 수({MAX_DAILY_PRODUCTS})를 초과하여 종료합니다."
+                logger.warning(msg)
+                stats["errors"].append(msg)
+                finish_run_log(run_id, status="failed", error=msg)
+                return stats
+
+            if max_products > remaining:
+                max_products = remaining
+
             # ── STEP 1: 상품 소싱 ──
             logger.info("\n[STEP 1/5] 상품 소싱 중...")
-            products = await self.sourcer.run_sourcing_pipeline(source_url)
+            if source == "aliexpress" and not keyword:
+                keyword = get_daily_trend_keyword() or ALIEXPRESS_DEFAULT_KEYWORD
+            if source == "aliexpress" and not keyword:
+                raise Exception("AliExpress 소싱 키워드가 설정되지 않았습니다.")
+
+            products = await self.sourcer.run_sourcing_pipeline(
+                url=source_url,
+                source=source,
+                keyword=keyword,
+                max_items=max_products
+            )
             products = products[:max_products]
             stats["products"] = len(products)
 
@@ -109,9 +148,40 @@ class AutomationPipeline:
                     logger.info(f"[STEP 4/5] 인스타그램 업로드: {product_name}")
 
                     # 제휴 링크 생성
-                    affiliate_link = InstagramManager.generate_affiliate_link(
-                        product.get("link", "")
+                    affiliate_link = (
+                        product.get("affiliate_link")
+                        or InstagramManager.generate_affiliate_link(product.get("link", ""))
                     )
+                    if affiliate_link:
+                        update_product_affiliate_link(product.get("id"), affiliate_link)
+
+                    # Notion 업로드 (우선) / Linktree (옵션)
+                    bio_url = ""
+                    if self.notion.is_ready():
+                        notion_url = self.notion.upsert_product(
+                            product_code=product.get("product_code", ""),
+                            product_name=product_name,
+                            link_url=affiliate_link or product.get("link", ""),
+                            source=product.get("source", source),
+                            price=product.get("price", ""),
+                            image_url=product.get("image_url", "")
+                        )
+                        if notion_url:
+                            update_product_notion(product.get("id"), notion_url)
+                            product["notion_url"] = notion_url
+                        bio_url = self.notion.get_public_url() or notion_url
+
+                    if not bio_url and self.linktree.is_ready():
+                        linktree_url = self.linktree.publish_link(
+                            product_name=product_name,
+                            product_code=product.get("product_code", ""),
+                            url=affiliate_link or product.get("link", ""),
+                            source=product.get("source", source)
+                        )
+                        if linktree_url:
+                            update_product_linktree(product.get("id"), linktree_url)
+                            product["linktree_url"] = linktree_url
+                            bio_url = linktree_url
 
                     for video in edited_videos:
                         media_id = self.social.upload_reel(
@@ -136,7 +206,9 @@ class AutomationPipeline:
                                 engagement = self.social.monitor_comments(
                                     media_id=media_id,
                                     product_name=product_name,
+                                    product_code=product.get("product_code", ""),
                                     affiliate_link=affiliate_link,
+                                    bio_url=bio_url,
                                     duration_minutes=monitor_duration
                                 )
                                 stats["dms"] += engagement.get("dms", 0)
@@ -179,9 +251,28 @@ class AutomationPipeline:
 
         return stats
 
-    async def run_sourcing_only(self, url: str = None) -> list:
+    async def run_sourcing_only(self, url: str = None,
+                                source: str = "aliexpress",
+                                keyword: str = None,
+                                max_products: int = None) -> list:
         """소싱만 실행"""
-        return await self.sourcer.run_sourcing_pipeline(url)
+        max_products = max_products or MAX_PRODUCTS_PER_RUN
+        today_count = get_today_product_count()
+        remaining = max(0, MAX_DAILY_PRODUCTS - today_count)
+        if remaining <= 0:
+            logger.warning(f"하루 최대 상품 수({MAX_DAILY_PRODUCTS})를 초과하여 소싱을 중단합니다.")
+            return []
+        if max_products > remaining:
+            max_products = remaining
+
+        if source == "aliexpress" and not keyword:
+            keyword = get_daily_trend_keyword() or ALIEXPRESS_DEFAULT_KEYWORD
+        return await self.sourcer.run_sourcing_pipeline(
+            url=url,
+            source=source,
+            keyword=keyword,
+            max_items=max_products
+        )
 
     def run_mining_only(self, product: dict) -> list:
         """마이닝만 실행"""
@@ -211,7 +302,9 @@ async def main():
     pipeline = AutomationPipeline()
     result = await pipeline.run_full_pipeline(
         monitor_comments=True,
-        monitor_duration=30
+        monitor_duration=30,
+        source="aliexpress",
+        keyword=None
     )
 
     print(f"\n최종 결과: {result}")

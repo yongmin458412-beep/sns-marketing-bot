@@ -24,14 +24,39 @@ for d in [DATA_DIR, ASSETS_DIR, SESSIONS_DIR, DOWNLOADS_DIR]:
 # Streamlit secrets 호환 로드
 # ──────────────────────────────────────────────
 def _load_streamlit_secrets() -> dict:
-    """Streamlit secrets.toml이 있으면 파싱하여 반환"""
-    secrets_path = BASE_DIR / ".streamlit" / "secrets.toml"
-    if secrets_path.exists():
-        try:
-            import toml
-            return toml.load(secrets_path)
-        except ImportError:
-            pass
+    """
+    Streamlit secrets 로드
+    우선순위:
+    1) st.secrets (Streamlit Cloud/로컬)
+    2) 프로젝트 .streamlit/secrets.toml
+    3) 홈 디렉토리 ~/.streamlit/secrets.toml
+    """
+    # 1) Streamlit Secrets API
+    try:
+        import streamlit as st  # type: ignore
+        if hasattr(st, "secrets"):
+            if hasattr(st.secrets, "to_dict"):
+                secrets = st.secrets.to_dict()
+            else:
+                secrets = dict(st.secrets)
+            if secrets:
+                return secrets
+    except Exception:
+        pass
+
+    # 2) 로컬 파일
+    secrets_paths = [
+        BASE_DIR / ".streamlit" / "secrets.toml",
+        Path.home() / ".streamlit" / "secrets.toml",
+    ]
+    for secrets_path in secrets_paths:
+        if secrets_path.exists():
+            try:
+                import toml
+                return toml.load(secrets_path)
+            except Exception:
+                continue
+
     return {}
 
 _secrets = _load_streamlit_secrets()
@@ -39,7 +64,18 @@ _secrets = _load_streamlit_secrets()
 
 def get_secret(key: str, default: str = "") -> str:
     """환경변수 → Streamlit secrets → 기본값 순으로 조회"""
-    return os.environ.get(key, _secrets.get(key, default))
+    if key in os.environ:
+        return os.environ.get(key, default)
+    if key in _secrets:
+        return _secrets.get(key, default)
+
+    # 섹션형 secrets 지원 (예: [secrets], [default])
+    for section in ("secrets", "default"):
+        section_map = _secrets.get(section)
+        if isinstance(section_map, dict) and key in section_map:
+            return section_map.get(key, default)
+
+    return default
 
 
 # ──────────────────────────────────────────────
@@ -55,6 +91,12 @@ INSTAGRAM_PASSWORD = get_secret("INSTAGRAM_PASSWORD")
 COUPANG_ACCESS_KEY = get_secret("COUPANG_ACCESS_KEY")
 COUPANG_SECRET_KEY = get_secret("COUPANG_SECRET_KEY")
 COUPANG_PARTNER_ID = get_secret("COUPANG_PARTNER_ID")
+
+ALIEXPRESS_APP_KEY = get_secret("ALIEXPRESS_APP_KEY")
+ALIEXPRESS_APP_SECRET = get_secret("ALIEXPRESS_APP_SECRET")
+ALIEXPRESS_TRACKING_ID = get_secret("ALIEXPRESS_TRACKING_ID")
+ALIEXPRESS_LANGUAGE = get_secret("ALIEXPRESS_LANGUAGE", "EN")
+ALIEXPRESS_CURRENCY = get_secret("ALIEXPRESS_CURRENCY", "USD")
 
 # ──────────────────────────────────────────────
 # 크롤링 / 필터 설정
@@ -90,6 +132,7 @@ MAX_DM_PER_HOUR = 20           # 시간당 최대 DM 발송 수 (안전 제한)
 # ──────────────────────────────────────────────
 DAILY_RUN_COUNT = 3            # 하루 실행 횟수
 MAX_PRODUCTS_PER_RUN = 5       # 실행당 최대 처리 상품 수
+MAX_DAILY_PRODUCTS = 12        # 하루 최대 상품 소싱 수 (안전 제한)
 
 # ──────────────────────────────────────────────
 # 데이터베이스 설정
@@ -130,7 +173,59 @@ REPLY_TEMPLATES = [
 DM_TEMPLATE = """안녕하세요! 😊
 문의하신 제품 정보입니다!
 
-👉 {product_name}
-🔗 {affiliate_link}
+제품번호: {product_code}
+상품명: {product_name}
+{bio_text}
+{affiliate_text}
 
 좋은 하루 보내세요! 💕"""
+
+# ──────────────────────────────────────────────
+# AliExpress 기본 키워드 (자동 실행용)
+# ──────────────────────────────────────────────
+ALIEXPRESS_DEFAULT_KEYWORD = get_secret("ALIEXPRESS_DEFAULT_KEYWORD", "")
+
+# ──────────────────────────────────────────────
+# Linktree/Webhook 설정
+# ──────────────────────────────────────────────
+LINKTREE_MODE = get_secret("LINKTREE_MODE", "webhook")  # webhook | queue | disabled
+LINKTREE_WEBHOOK_URL = get_secret("LINKTREE_WEBHOOK_URL")
+LINKTREE_WEBHOOK_SECRET = get_secret("LINKTREE_WEBHOOK_SECRET")
+
+# ──────────────────────────────────────────────
+# 트렌드 키워드 설정 (한국 트렌드 자동 소싱)
+# ──────────────────────────────────────────────
+TREND_SOURCE = get_secret("TREND_SOURCE", "google_trends")  # google_trends | fallback
+TREND_GEO = get_secret("TREND_GEO", "KR")
+TREND_MAX_ITEMS = int(get_secret("TREND_MAX_ITEMS", "20") or 20)
+
+_fallback_raw = get_secret("TREND_FALLBACK_KEYWORDS", "")
+if _fallback_raw:
+    TREND_FALLBACK_KEYWORDS = [x.strip() for x in _fallback_raw.split(",") if x.strip()]
+else:
+    TREND_FALLBACK_KEYWORDS = [
+        "가성비 전자제품",
+        "주방 꿀템",
+        "홈카페 용품",
+        "운동용품",
+        "스킨케어",
+        "미니 가전",
+        "정리 수납",
+        "자동차 용품",
+        "캠핑 용품",
+        "반려동물 용품",
+    ]
+
+# ──────────────────────────────────────────────
+# Notion 링크 페이지 설정
+# ──────────────────────────────────────────────
+NOTION_TOKEN = get_secret("NOTION_TOKEN")
+NOTION_DATABASE_ID = get_secret("NOTION_DATABASE_ID")
+NOTION_PUBLIC_URL = get_secret("NOTION_PUBLIC_URL")  # 인스타 프로필에 걸어둘 노션 공개 링크
+
+NOTION_PROP_NAME = get_secret("NOTION_PROP_NAME", "Name")  # title
+NOTION_PROP_CODE = get_secret("NOTION_PROP_CODE", "Product Code")  # rich_text
+NOTION_PROP_LINK = get_secret("NOTION_PROP_LINK", "Link")  # url
+NOTION_PROP_SOURCE = get_secret("NOTION_PROP_SOURCE", "Source")  # select
+NOTION_PROP_PRICE = get_secret("NOTION_PROP_PRICE", "Price")  # rich_text/number
+NOTION_PROP_IMAGE = get_secret("NOTION_PROP_IMAGE", "Image")  # url

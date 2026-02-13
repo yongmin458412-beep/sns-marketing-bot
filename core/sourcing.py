@@ -19,7 +19,8 @@ from config import (
     OPENAI_API_KEY, COUPANG_GOLDBOX_URL, COUPANG_RANKING_URL,
     VISION_PROMPT, MAX_PRODUCTS_PER_RUN, DOWNLOADS_DIR
 )
-from core.database import insert_product
+from core.database import insert_product, update_product_code
+from core.aliexpress_api import AliExpressClient
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ class ProductSourcer:
 
     def __init__(self):
         self.client = OpenAI(api_key=OPENAI_API_KEY)
+        self.aliexpress = AliExpressClient()
         self.headers = {
             "User-Agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -166,6 +168,28 @@ class ProductSourcer:
         ]
 
     # ──────────────────────────────────────────
+    # AliExpress API 검색
+    # ──────────────────────────────────────────
+
+    def search_aliexpress_products(self, keyword: str,
+                                   max_items: int = None) -> list[dict]:
+        """
+        AliExpress API로 상품 검색
+        Returns: [{"name": str, "image_url": str, "price": str, "link": str,
+                   "affiliate_link": str, "source": "aliexpress"}, ...]
+        """
+        max_items = max_items or MAX_PRODUCTS_PER_RUN
+        if not keyword:
+            logger.error("AliExpress 검색 키워드가 비어 있습니다.")
+            return []
+
+        if not self.aliexpress.is_ready():
+            logger.error("AliExpress API가 설정되지 않아 검색할 수 없습니다.")
+            return []
+
+        return self.aliexpress.search_products(keyword, max_items=max_items)
+
+    # ──────────────────────────────────────────
     # GPT-4o Vision 분석
     # ──────────────────────────────────────────
 
@@ -248,7 +272,10 @@ class ProductSourcer:
     # 통합 파이프라인
     # ──────────────────────────────────────────
 
-    async def run_sourcing_pipeline(self, url: str = None) -> list[dict]:
+    async def run_sourcing_pipeline(self, url: str = None,
+                                    source: str = "coupang",
+                                    keyword: str = None,
+                                    max_items: int = None) -> list[dict]:
         """
         전체 소싱 파이프라인 실행
         1. 쿠팡 크롤링
@@ -258,19 +285,33 @@ class ProductSourcer:
         """
         logger.info("=== 상품 소싱 파이프라인 시작 ===")
 
-        # 1. 크롤링
-        raw_products = await self.crawl_coupang_products(url)
+        max_items = max_items or MAX_PRODUCTS_PER_RUN
+
+        # 1. 소싱
+        if source == "aliexpress":
+            if not keyword:
+                logger.error("AliExpress 소싱 키워드가 비어 있습니다.")
+                return []
+            raw_products = self.search_aliexpress_products(
+                keyword=keyword,
+                max_items=max_items
+            )
+        else:
+            raw_products = await self.crawl_coupang_products(url, max_items=max_items)
 
         # 2. 분석 및 저장
         analyzed_products = []
         for product in raw_products:
             # Vision 분석 시도 → 실패 시 텍스트 분석
-            if product.get("image_url"):
-                analysis = self.analyze_product_image(
-                    image_url=product["image_url"]
-                )
+            if source == "aliexpress":
+                analysis = self.analyze_product_by_name(product.get("name", ""))
             else:
-                analysis = self.analyze_product_by_name(product["name"])
+                if product.get("image_url"):
+                    analysis = self.analyze_product_image(
+                        image_url=product["image_url"]
+                    )
+                else:
+                    analysis = self.analyze_product_by_name(product["name"])
 
             # 결과 병합
             product["name_en"] = analysis.get("product_name", "")
@@ -283,9 +324,17 @@ class ProductSourcer:
                 keywords=product["keywords"],
                 image_url=product.get("image_url", ""),
                 price=product.get("price", ""),
-                affiliate_link=product.get("link", "")
+                affiliate_link=product.get("affiliate_link", product.get("link", "")),
+                source=product.get("source", source)
             )
+            product_code = self._generate_product_code(
+                product_id,
+                product.get("source", source)
+            )
+            update_product_code(product_id, product_code)
+
             product["id"] = product_id
+            product["product_code"] = product_code
             analyzed_products.append(product)
 
             logger.info(
@@ -295,6 +344,11 @@ class ProductSourcer:
 
         logger.info(f"=== 소싱 완료: {len(analyzed_products)}개 상품 ===")
         return analyzed_products
+
+    @staticmethod
+    def _generate_product_code(product_id: int, source: str) -> str:
+        prefix = "AE" if (source or "").lower().startswith("ali") else "CP"
+        return f"{prefix}-{product_id:06d}"
 
 
 # ──────────────────────────────────────────────

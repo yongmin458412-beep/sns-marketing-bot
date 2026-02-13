@@ -17,7 +17,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from config import (
     OPENAI_API_KEY, TELEGRAM_BOT_TOKEN, INSTAGRAM_USERNAME,
     COUPANG_GOLDBOX_URL, COUPANG_RANKING_URL,
-    MAX_PRODUCTS_PER_RUN, DATA_DIR
+    MAX_PRODUCTS_PER_RUN, DATA_DIR, MAX_DAILY_PRODUCTS,
+    ALIEXPRESS_APP_KEY, ALIEXPRESS_APP_SECRET, ALIEXPRESS_TRACKING_ID,
+    LINKTREE_MODE, LINKTREE_WEBHOOK_URL,
+    TREND_SOURCE, TREND_GEO,
+    NOTION_TOKEN, NOTION_DATABASE_ID, NOTION_PUBLIC_URL
 )
 from core.database import get_stats, get_recent_logs, get_connection
 from core.pipeline import AutomationPipeline
@@ -128,19 +132,36 @@ elif page == "🚀 수동 실행":
 
     with col1:
         st.subheader("실행 설정")
+        source_options = ["쿠팡 골드박스", "쿠팡 랭킹", "알리익스프레스 API", "커스텀 URL"]
+        default_index = source_options.index("알리익스프레스 API")
         source_option = st.selectbox(
             "소싱 소스",
-            ["쿠팡 골드박스", "쿠팡 랭킹", "커스텀 URL"]
+            source_options,
+            index=default_index
         )
 
-        if source_option == "커스텀 URL":
+        source_type = "coupang"
+        ali_keyword = None
+
+        if source_option == "알리익스프레스 API":
+            source_type = "aliexpress"
+            source_url = None
+            ali_keyword = st.text_input(
+                "알리익스프레스 검색 키워드 (비워두면 한국 트렌드 자동)",
+                ""
+            )
+        elif source_option == "커스텀 URL":
             source_url = st.text_input("URL 입력", "")
         elif source_option == "쿠팡 랭킹":
             source_url = COUPANG_RANKING_URL
         else:
             source_url = COUPANG_GOLDBOX_URL
 
-        max_products = st.slider("처리할 상품 수", 1, 10, MAX_PRODUCTS_PER_RUN)
+        max_products = st.slider(
+            "처리할 상품 수",
+            1, 10,
+            min(MAX_PRODUCTS_PER_RUN, MAX_DAILY_PRODUCTS)
+        )
         monitor_comments = st.checkbox("댓글 모니터링 활성화", value=True)
         monitor_duration = st.slider("모니터링 시간 (분)", 5, 120, 30)
 
@@ -162,6 +183,8 @@ elif page == "🚀 수동 실행":
                     pipeline.run_full_pipeline(
                         source_url=source_url,
                         max_products=max_products,
+                        source=source_type,
+                        keyword=ali_keyword,
                         monitor_comments=monitor_comments,
                         monitor_duration=monitor_duration
                     )
@@ -176,7 +199,12 @@ elif page == "🚀 수동 실행":
             with st.spinner("상품 소싱 중..."):
                 pipeline = AutomationPipeline()
                 products = asyncio.run(
-                    pipeline.run_sourcing_only(source_url)
+                    pipeline.run_sourcing_only(
+                        url=source_url,
+                        source=source_type,
+                        keyword=ali_keyword,
+                        max_products=max_products
+                    )
                 )
 
                 st.success(f"{len(products)}개 상품 소싱 완료!")
@@ -258,11 +286,19 @@ elif page == "📦 상품 관리":
                     if p.get("image_url"):
                         st.image(p["image_url"], width=150)
                 with col2:
+                    if p.get("product_code"):
+                        st.write(f"**제품번호:** {p.get('product_code')}")
                     st.write(f"**한국어명:** {p['name']}")
                     st.write(f"**영문명:** {p.get('name_en', 'N/A')}")
                     keywords = json.loads(p.get("keywords", "[]"))
                     st.write(f"**키워드:** {', '.join(keywords)}")
                     st.write(f"**가격:** {p.get('price', 'N/A')}")
+                    if p.get("affiliate_link"):
+                        st.write(f"**제휴링크:** {p.get('affiliate_link')}")
+                    if p.get("notion_url"):
+                        st.write(f"**Notion:** {p.get('notion_url')}")
+                    if p.get("linktree_url"):
+                        st.write(f"**Linktree:** {p.get('linktree_url')}")
                     st.write(f"**소싱일:** {p.get('created_at', 'N/A')}")
     else:
         st.info("소싱된 상품이 없습니다.")
@@ -369,6 +405,17 @@ elif page == "⚙️ 설정":
         "Telegram Bot Token": "✅ 설정됨" if TELEGRAM_BOT_TOKEN else "❌ 미설정",
         "Instagram Username": INSTAGRAM_USERNAME or "❌ 미설정",
         "Instagram Password": "✅ 설정됨" if INSTAGRAM_USERNAME else "❌ 미설정",
+        "AliExpress App Key": "✅ 설정됨" if ALIEXPRESS_APP_KEY else "❌ 미설정",
+        "AliExpress App Secret": "✅ 설정됨" if ALIEXPRESS_APP_SECRET else "❌ 미설정",
+        "AliExpress Tracking ID": "✅ 설정됨" if ALIEXPRESS_TRACKING_ID else "❌ 미설정",
+        "Daily Product Limit": f"{MAX_DAILY_PRODUCTS}개/일",
+        "Linktree Mode": LINKTREE_MODE or "미설정",
+        "Linktree Webhook": "✅ 설정됨" if LINKTREE_WEBHOOK_URL else "❌ 미설정",
+        "Trend Source": TREND_SOURCE or "미설정",
+        "Trend Geo": TREND_GEO or "미설정",
+        "Notion Token": "✅ 설정됨" if NOTION_TOKEN else "❌ 미설정",
+        "Notion Database": "✅ 설정됨" if NOTION_DATABASE_ID else "❌ 미설정",
+        "Notion Public URL": NOTION_PUBLIC_URL or "❌ 미설정",
     }
 
     for key, value in settings.items():
@@ -422,4 +469,34 @@ INSTAGRAM_PASSWORD = "your_password"
 COUPANG_ACCESS_KEY = "your_access_key"
 COUPANG_SECRET_KEY = "your_secret_key"
 COUPANG_PARTNER_ID = "your_partner_id"
+
+# AliExpress Open Platform
+ALIEXPRESS_APP_KEY = "your_app_key"
+ALIEXPRESS_APP_SECRET = "your_app_secret"
+ALIEXPRESS_TRACKING_ID = "your_tracking_id"
+ALIEXPRESS_LANGUAGE = "EN"   # optional, default EN
+ALIEXPRESS_CURRENCY = "USD"  # optional, default USD
+ALIEXPRESS_DEFAULT_KEYWORD = "kitchen gadget"
+
+# Linktree Webhook (자동 업로드)
+LINKTREE_MODE = "webhook"  # webhook | queue | disabled
+LINKTREE_WEBHOOK_URL = "https://your-webhook-url"
+LINKTREE_WEBHOOK_SECRET = "your-secret"
+
+# Trend keyword settings (KR)
+TREND_SOURCE = "google_trends"  # google_trends | fallback
+TREND_GEO = "KR"
+TREND_MAX_ITEMS = "20"
+TREND_FALLBACK_KEYWORDS = "가성비 전자제품,주방 꿀템,홈카페 용품,운동용품,스킨케어"
+
+# Notion (Link-in-bio)
+NOTION_TOKEN = "secret_xxx"
+NOTION_DATABASE_ID = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+NOTION_PUBLIC_URL = "https://www.notion.so/your-page"
+NOTION_PROP_NAME = "Name"
+NOTION_PROP_CODE = "Product Code"
+NOTION_PROP_LINK = "Link"
+NOTION_PROP_SOURCE = "Source"
+NOTION_PROP_PRICE = "Price"
+NOTION_PROP_IMAGE = "Image"
     """, language="toml")

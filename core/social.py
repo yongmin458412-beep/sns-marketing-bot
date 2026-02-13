@@ -212,7 +212,9 @@ class InstagramManager:
     # ──────────────────────────────────────────
 
     def monitor_comments(self, media_id: str, product_name: str = "",
+                         product_code: str = "",
                          affiliate_link: str = "",
+                         bio_url: str = "",
                          duration_minutes: int = 60) -> dict:
         """
         게시물 댓글 모니터링 및 자동 대댓글 + DM 발송
@@ -270,11 +272,23 @@ class InstagramManager:
 
                     # 2. DM 발송 (시간당 제한 체크)
                     dm_sent = False
-                    if self.dm_count_this_hour < MAX_DM_PER_HOUR and affiliate_link:
-                        dm_text = DM_TEMPLATE.format(
-                            product_name=product_name,
-                            affiliate_link=affiliate_link
+                    if self.dm_count_this_hour < MAX_DM_PER_HOUR:
+                        search_token = product_code or product_name or "해당 상품"
+                        bio_text = (
+                            f"바이오 링크: {bio_url}"
+                            if bio_url else
+                            f"바이오 링크에서 {search_token} 검색"
                         )
+                        affiliate_text = (
+                            f"구매링크: {affiliate_link}"
+                            if affiliate_link else ""
+                        )
+                        dm_text = DM_TEMPLATE.format(
+                            product_code=product_code or "N/A",
+                            product_name=product_name,
+                            bio_text=bio_text,
+                            affiliate_text=affiliate_text
+                        ).strip()
                         try:
                             user_id = comment.user.pk
                             self.client.direct_send(dm_text, user_ids=[user_id])

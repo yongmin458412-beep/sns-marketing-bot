@@ -36,6 +36,9 @@ def _init_tables(conn: sqlite3.Connection):
             price TEXT,
             affiliate_link TEXT,
             source TEXT DEFAULT 'coupang',
+            product_code TEXT,
+            linktree_url TEXT,
+            notion_url TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             status TEXT DEFAULT 'sourced'
         )
@@ -105,6 +108,21 @@ def _init_tables(conn: sqlite3.Connection):
 
     conn.commit()
 
+    _ensure_columns(conn, "products", {
+        "product_code": "TEXT",
+        "linktree_url": "TEXT",
+        "notion_url": "TEXT",
+    })
+
+
+def _ensure_columns(conn: sqlite3.Connection, table: str, columns: dict):
+    """테이블에 누락된 컬럼 추가"""
+    existing = [row["name"] for row in conn.execute(f"PRAGMA table_info({table})")]
+    for col, col_def in columns.items():
+        if col not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {col_def}")
+    conn.commit()
+
 
 # ──────────────────────────────────────────────
 # CRUD 함수들
@@ -112,19 +130,74 @@ def _init_tables(conn: sqlite3.Connection):
 
 def insert_product(name: str, name_en: str = "", keywords: list = None,
                    image_url: str = "", price: str = "",
-                   affiliate_link: str = "") -> int:
+                   affiliate_link: str = "", source: str = "coupang",
+                   product_code: str = "", linktree_url: str = "",
+                   notion_url: str = "") -> int:
     """상품 정보 저장 후 ID 반환"""
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
-        """INSERT INTO products (name, name_en, keywords, image_url, price, affiliate_link)
-           VALUES (?, ?, ?, ?, ?, ?)""",
-        (name, name_en, json.dumps(keywords or []), image_url, price, affiliate_link)
+        """INSERT INTO products (name, name_en, keywords, image_url, price,
+           affiliate_link, source, product_code, linktree_url, notion_url)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (name, name_en, json.dumps(keywords or []), image_url, price,
+         affiliate_link, source, product_code, linktree_url, notion_url)
     )
     conn.commit()
     product_id = cursor.lastrowid
     conn.close()
     return product_id
+
+
+def update_product_code(product_id: int, product_code: str):
+    conn = get_connection()
+    conn.execute(
+        "UPDATE products SET product_code = ? WHERE id = ?",
+        (product_code, product_id)
+    )
+    conn.commit()
+    conn.close()
+
+
+def update_product_affiliate_link(product_id: int, affiliate_link: str):
+    conn = get_connection()
+    conn.execute(
+        "UPDATE products SET affiliate_link = ? WHERE id = ?",
+        (affiliate_link, product_id)
+    )
+    conn.commit()
+    conn.close()
+
+
+def update_product_linktree(product_id: int, linktree_url: str):
+    conn = get_connection()
+    conn.execute(
+        "UPDATE products SET linktree_url = ? WHERE id = ?",
+        (linktree_url, product_id)
+    )
+    conn.commit()
+    conn.close()
+
+
+def update_product_notion(product_id: int, notion_url: str):
+    conn = get_connection()
+    conn.execute(
+        "UPDATE products SET notion_url = ? WHERE id = ?",
+        (notion_url, product_id)
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_today_product_count() -> int:
+    """오늘 생성된 상품 수 조회 (로컬타임 기준)"""
+    conn = get_connection()
+    count = conn.execute(
+        "SELECT COUNT(*) FROM products "
+        "WHERE date(created_at, 'localtime') = date('now', 'localtime')"
+    ).fetchone()[0]
+    conn.close()
+    return count
 
 
 def insert_video(product_id: int, platform: str, original_url: str,
