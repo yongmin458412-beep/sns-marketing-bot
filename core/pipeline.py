@@ -6,6 +6,7 @@ pipeline.py - 전체 자동화 파이프라인 통합 모듈
 import logging
 import asyncio
 import traceback
+import random
 from pathlib import Path
 
 import sys
@@ -15,6 +16,7 @@ from config import (
     MAX_DAILY_PRODUCTS, ALIEXPRESS_DEFAULT_KEYWORD,
     ALIEXPRESS_KEYWORD_POOL,
     ALIEXPRESS_VIDEO_FIRST, VIDEO_FIRST_MIN_VIDEOS, VIDEO_FIRST_MAX_VIDEOS,
+    TREND_FALLBACK_KEYWORDS,
 )
 from core.sourcing import ProductSourcer
 from core.mining import VideoMiner
@@ -23,7 +25,9 @@ from core.social import InstagramManager
 from core.bot import TelegramNotifier
 from core.linktree import LinktreeManager
 from core.notion_links import NotionLinkManager
-from core.trends import get_daily_trend_keyword, pick_daily_from_pool
+from core.trends import (
+    get_daily_trend_keyword, pick_daily_from_pool, get_daily_trend_keywords
+)
 from core.database import (
     start_run_log, finish_run_log,
     get_today_product_count,
@@ -284,23 +288,14 @@ class AutomationPipeline:
         """
         Video-First: 영상 수집 → 상품 검색(AliExpress) → 편집/업로드
         """
-        # 키워드 리스트 구성
-        keywords = []
-        if keyword:
-            keywords = [keyword]
-        else:
-            pool = ALIEXPRESS_KEYWORD_POOL or []
-            if pool:
-                keywords = pool[:]
-            else:
-                trend = get_daily_trend_keyword()
-                if trend:
-                    keywords = [trend]
+        keyword_stream = self._video_first_keyword_stream(keyword)
+        first_keyword = None
+        try:
+            first_keyword = next(keyword_stream)
+        except Exception:
+            first_keyword = None
 
-        if not keywords and ALIEXPRESS_DEFAULT_KEYWORD:
-            keywords = [ALIEXPRESS_DEFAULT_KEYWORD]
-
-        if not keywords:
+        if not first_keyword:
             msg = "Video-First 키워드가 없습니다."
             logger.error(msg)
             stats["errors"].append(msg)
@@ -319,8 +314,17 @@ class AutomationPipeline:
 
         max_products = min(max_products, remaining)
 
-        # 제품 후보 최대 max_products 개 처리
-        for kw in keywords[:max_products]:
+        # 제품 후보 최대 max_products 개 처리 (무한 루프)
+        while stats["products"] < max_products:
+            try:
+                kw = first_keyword if first_keyword else next(keyword_stream)
+                first_keyword = None
+            except Exception:
+                kw = None
+
+            if not kw:
+                continue
+
             try:
                 logger.info(f"\n[STEP 1/5] 영상 수집 키워드: {kw}")
                 videos = self.miner.mine_by_keyword(
@@ -472,6 +476,47 @@ class AutomationPipeline:
             status="completed"
         )
         return stats
+
+    def _video_first_keyword_stream(self, seed_keyword: str | None):
+        """새로운 키워드를 계속 생성하는 무한 스트림"""
+        while True:
+            batch = self._build_video_first_keywords(seed_keyword)
+            if not batch:
+                if ALIEXPRESS_DEFAULT_KEYWORD:
+                    batch = [ALIEXPRESS_DEFAULT_KEYWORD]
+                else:
+                    batch = []
+
+            random.shuffle(batch)
+            for kw in batch:
+                if kw:
+                    yield kw
+            # 한 바퀴 돌면 다시 새로운 배치를 만들어 계속 반복
+
+    @staticmethod
+    def _build_video_first_keywords(seed_keyword: str | None) -> list[str]:
+        keys: list[str] = []
+        if seed_keyword:
+            keys.append(seed_keyword)
+        # 생활용품 풀 + 트렌드 + fallback
+        keys.extend(ALIEXPRESS_KEYWORD_POOL or [])
+        keys.extend(get_daily_trend_keywords() or [])
+        keys.extend(TREND_FALLBACK_KEYWORDS or [])
+        if ALIEXPRESS_DEFAULT_KEYWORD:
+            keys.append(ALIEXPRESS_DEFAULT_KEYWORD)
+
+        # 중복 제거 (순서 유지)
+        seen = set()
+        deduped = []
+        for k in keys:
+            k = (k or "").strip()
+            if not k:
+                continue
+            if k.lower() in seen:
+                continue
+            seen.add(k.lower())
+            deduped.append(k)
+        return deduped
 
     async def run_sourcing_only(self, url: str = None,
                                 source: str = "aliexpress",
