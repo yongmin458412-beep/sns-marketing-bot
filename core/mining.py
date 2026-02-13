@@ -7,6 +7,7 @@ import json
 import logging
 import subprocess
 import re
+import requests
 from pathlib import Path
 from typing import Optional
 
@@ -14,7 +15,9 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from config import (
     MIN_VIEW_COUNT, MIN_LIKE_COUNT, MIN_DURATION, MAX_DURATION,
-    DOWNLOADS_DIR
+    DOWNLOADS_DIR,
+    IG_GRAPH_API_VERSION, IG_GRAPH_HOST, IG_USER_ID, IG_ACCESS_TOKEN,
+    IG_MINING_ENABLED, IG_MINING_TOP_MEDIA, IG_MINING_MAX_RESULTS,
 )
 from core.database import insert_video, is_url_processed
 
@@ -148,6 +151,57 @@ class VideoMiner:
             return []
 
     # ──────────────────────────────────────────
+    # Instagram Reels 검색 (Graph API)
+    # ──────────────────────────────────────────
+
+    def search_instagram_reels(self, keyword: str,
+                               max_results: int = None) -> list[dict]:
+        """
+        Instagram Graph API 해시태그 검색으로 릴스/비디오 수집
+        Returns: [{"url": str, "title": str, "platform": "instagram", ...}, ...]
+        """
+        max_results = max_results or IG_MINING_MAX_RESULTS
+        if not IG_MINING_ENABLED:
+            return []
+        if not (IG_USER_ID and IG_ACCESS_TOKEN):
+            logger.debug("IG_MINING: 토큰 또는 IG_USER_ID 미설정")
+            return []
+        if not keyword:
+            return []
+
+        hashtags = self._build_hashtags(keyword)
+        videos: list[dict] = []
+
+        for tag in hashtags:
+            hashtag_id = self._ig_hashtag_search(tag)
+            if not hashtag_id:
+                continue
+            media = self._ig_hashtag_media(hashtag_id, max_results=max_results)
+            for m in media:
+                media_type = (m.get("media_type") or "").upper()
+                product_type = (m.get("media_product_type") or "").upper()
+                if media_type not in ("VIDEO", "REELS") and product_type != "REELS":
+                    continue
+                media_url = m.get("media_url")
+                if not media_url:
+                    continue
+                videos.append({
+                    "url": media_url,
+                    "dedupe_url": m.get("permalink") or m.get("id") or media_url,
+                    "title": (m.get("caption") or tag)[:120],
+                    "view_count": 0,
+                    "like_count": 0,
+                    "duration": 0,
+                    "platform": "instagram",
+                })
+
+            if len(videos) >= max_results:
+                break
+
+        logger.info(f"Instagram Reels 검색 결과: {len(videos)}개 발견")
+        return videos[:max_results]
+
+    # ──────────────────────────────────────────
     # 필터링
     # ──────────────────────────────────────────
 
@@ -197,12 +251,12 @@ class VideoMiner:
     # ──────────────────────────────────────────
 
     def download_video(self, url: str, product_id: int = None,
-                       filename: str = None) -> Optional[str]:
+                       filename: str = None, dedupe_url: str = None) -> Optional[str]:
         """
         yt-dlp로 영상 다운로드 (워터마크 제거 옵션 포함)
         Returns: 다운로드된 파일 경로 또는 None
         """
-        if is_url_processed(url):
+        if is_url_processed(dedupe_url or url):
             logger.info(f"이미 처리된 URL, 스킵: {url}")
             return None
 
@@ -294,6 +348,10 @@ class VideoMiner:
             tt_results = self.search_tiktok(keyword)
             all_videos.extend(tt_results)
 
+            # Instagram Reels 검색
+            ig_results = self.search_instagram_reels(keyword)
+            all_videos.extend(ig_results)
+
         # 중복 제거 (URL 기준)
         seen_urls = set()
         unique_videos = []
@@ -316,7 +374,8 @@ class VideoMiner:
             local_path = self.download_video(
                 url=video["url"],
                 product_id=product_id,
-                filename=f"product_{product_id}_{video['platform']}_{len(downloaded)}"
+                filename=f"product_{product_id}_{video['platform']}_{len(downloaded)}",
+                dedupe_url=video.get("dedupe_url")
             )
 
             if local_path:
@@ -324,7 +383,7 @@ class VideoMiner:
                 video_id = insert_video(
                     product_id=product_id,
                     platform=video["platform"],
-                    original_url=video["url"],
+                    original_url=video.get("dedupe_url") or video["url"],
                     local_path=local_path,
                     view_count=video.get("view_count", 0),
                     like_count=video.get("like_count", 0),
@@ -336,6 +395,69 @@ class VideoMiner:
 
         logger.info(f"=== 마이닝 완료: {len(downloaded)}개 영상 다운로드 ===")
         return downloaded
+
+    def _ig_request(self, path: str, params: dict | None = None) -> dict:
+        params = params or {}
+        params.setdefault("access_token", IG_ACCESS_TOKEN)
+        url = f"https://{IG_GRAPH_HOST}/{IG_GRAPH_API_VERSION}/{path.lstrip('/')}"
+        resp = requests.get(url, params=params, timeout=20)
+        try:
+            data = resp.json()
+        except Exception:
+            data = {}
+        if resp.status_code >= 400 or (isinstance(data, dict) and data.get("error")):
+            logger.debug(f"IG Graph API 오류: {data}")
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def _ig_hashtag_search(self, hashtag: str) -> str:
+        data = self._ig_request(
+            "ig_hashtag_search",
+            params={"user_id": IG_USER_ID, "q": hashtag}
+        )
+        items = data.get("data") if isinstance(data, dict) else None
+        if not items:
+            return ""
+        return items[0].get("id", "")
+
+    def _ig_hashtag_media(self, hashtag_id: str, max_results: int = 6) -> list[dict]:
+        if not hashtag_id:
+            return []
+        edge = "top_media" if IG_MINING_TOP_MEDIA else "recent_media"
+        fields = "id,caption,media_type,media_product_type,media_url,permalink"
+        data = self._ig_request(
+            f"{hashtag_id}/{edge}",
+            params={
+                "user_id": IG_USER_ID,
+                "fields": fields,
+                "limit": str(max_results)
+            }
+        )
+        return data.get("data", []) if isinstance(data, dict) else []
+
+    def _build_hashtags(self, keyword: str) -> list[str]:
+        """키워드를 해시태그 후보로 변환"""
+        cleaned = re.sub(r"[^0-9a-zA-Z가-힣 ]+", " ", keyword).strip()
+        if not cleaned:
+            return []
+        tokens = [t for t in cleaned.split() if t]
+        tags = []
+        if tokens:
+            tags.append("".join(tokens))
+            if len(tokens) >= 2:
+                tags.append("".join(tokens[:2]))
+            if len(tokens) >= 1:
+                tags.append(tokens[0])
+        # 중복 제거
+        seen = set()
+        result = []
+        for t in tags:
+            tl = t.lower()
+            if tl in seen:
+                continue
+            seen.add(tl)
+            result.append(t)
+        return result
 
     def mine_by_keyword(self, keyword: str,
                         max_videos: int = 5) -> list[dict]:

@@ -104,6 +104,9 @@ IG_ACCESS_TOKEN = get_secret("IG_ACCESS_TOKEN")
 IG_SHARE_TO_FEED = get_secret("IG_SHARE_TO_FEED", "false").lower() == "true"
 IG_CONTAINER_POLL_INTERVAL = int(get_secret("IG_CONTAINER_POLL_INTERVAL", "3") or 3)
 IG_CONTAINER_POLL_TIMEOUT = int(get_secret("IG_CONTAINER_POLL_TIMEOUT", "120") or 120)
+IG_MINING_ENABLED = get_secret("IG_MINING_ENABLED", "true").lower() == "true"
+IG_MINING_TOP_MEDIA = get_secret("IG_MINING_TOP_MEDIA", "true").lower() == "true"
+IG_MINING_MAX_RESULTS = int(get_secret("IG_MINING_MAX_RESULTS", "6") or 6)
 
 # 영상 공개 URL 생성(그래프 API 업로드용)
 VIDEO_HOSTING = get_secret("VIDEO_HOSTING", "cloudinary")  # cloudinary | public_url | none
