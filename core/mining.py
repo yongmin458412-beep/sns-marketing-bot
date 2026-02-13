@@ -20,7 +20,8 @@ from config import (
     IG_GRAPH_API_VERSION, IG_GRAPH_HOST, IG_USER_ID, IG_ACCESS_TOKEN,
     IG_MINING_ENABLED, IG_MINING_TOP_MEDIA, IG_MINING_MAX_RESULTS,
     YTDLP_USER_AGENT, YTDLP_REFERER, YTDLP_EXTRACTOR_ARGS,
-    YTDLP_COOKIES_FILE, YTDLP_COOKIES_BASE64, YTDLP_RETRIES, YTDLP_SLEEP_INTERVAL, YTDLP_MAX_SLEEP_INTERVAL,
+    YTDLP_COOKIES_FILE, YTDLP_COOKIES_BASE64, YTDLP_COOKIES_FROM_BROWSER,
+    YTDLP_PROXY, YTDLP_RETRIES, YTDLP_SLEEP_INTERVAL, YTDLP_MAX_SLEEP_INTERVAL,
     DATA_DIR,
 )
 from core.database import insert_video, is_url_processed
@@ -284,6 +285,8 @@ class VideoMiner:
                 "--quiet",
                 "--user-agent", YTDLP_USER_AGENT,
                 "--referer", YTDLP_REFERER,
+                "--add-header", "Accept-Language: en-US,en;q=0.9",
+                "--add-header", "Origin: https://www.youtube.com",
                 "--extractor-args", YTDLP_EXTRACTOR_ARGS,
                 "--retries", str(YTDLP_RETRIES),
                 "--sleep-interval", str(YTDLP_SLEEP_INTERVAL),
@@ -298,6 +301,11 @@ class VideoMiner:
 
             if cookies_path:
                 cmd.extend(["--cookies", str(cookies_path)])
+            elif YTDLP_COOKIES_FROM_BROWSER:
+                cmd.extend(["--cookies-from-browser", YTDLP_COOKIES_FROM_BROWSER])
+
+            if YTDLP_PROXY:
+                cmd.extend(["--proxy", YTDLP_PROXY])
 
             cmd.append(url)
 
@@ -342,9 +350,16 @@ class VideoMiner:
             DATA_DIR.mkdir(parents=True, exist_ok=True)
             path = DATA_DIR / "cookies.txt"
             if not path.exists():
-                decoded = base64.b64decode(YTDLP_COOKIES_BASE64.encode("utf-8"))
+                cleaned = re.sub(r"\s+", "", YTDLP_COOKIES_BASE64)
+                decoded = base64.b64decode(cleaned.encode("utf-8"))
                 with open(path, "wb") as f:
                     f.write(decoded)
+            try:
+                head = path.read_text(errors="ignore")[:20000]
+                if "youtube.com" not in head and ".youtube.com" not in head:
+                    logger.warning("cookies.txt에 youtube.com 쿠키가 없어 보입니다.")
+            except Exception:
+                pass
             self._cookies_path = path
             return path
         except Exception as e:

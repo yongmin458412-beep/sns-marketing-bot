@@ -179,9 +179,14 @@ YTDLP_USER_AGENT = get_secret(
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 YTDLP_REFERER = get_secret("YTDLP_REFERER", "https://www.youtube.com/")
-YTDLP_EXTRACTOR_ARGS = get_secret("YTDLP_EXTRACTOR_ARGS", "youtube:player_client=android")
+YTDLP_EXTRACTOR_ARGS = get_secret(
+    "YTDLP_EXTRACTOR_ARGS",
+    "youtube:player_client=android,web;player_skip=webpage",
+)
 YTDLP_COOKIES_FILE = get_secret("YTDLP_COOKIES_FILE", "")
 YTDLP_COOKIES_BASE64 = get_secret("YTDLP_COOKIES_BASE64", "")
+YTDLP_COOKIES_FROM_BROWSER = get_secret("YTDLP_COOKIES_FROM_BROWSER", "")
+YTDLP_PROXY = get_secret("YTDLP_PROXY", "")
 YTDLP_RETRIES = int(get_secret("YTDLP_RETRIES", "3") or 3)
 YTDLP_SLEEP_INTERVAL = int(get_secret("YTDLP_SLEEP_INTERVAL", "1") or 1)
 YTDLP_MAX_SLEEP_INTERVAL = int(get_secret("YTDLP_MAX_SLEEP_INTERVAL", "5") or 5)
