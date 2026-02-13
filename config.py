@@ -166,11 +166,11 @@ GENERIC_KEYWORDS = _split_csv(
 COUPANG_GOLDBOX_URL = "https://www.coupang.com/np/goldbox"
 COUPANG_RANKING_URL = "https://www.coupang.com/np/categories/393760"
 
-# 바이럴 영상 필터 기준
-MIN_VIEW_COUNT = 100_000       # 최소 조회수
-MIN_LIKE_COUNT = 5_000         # 최소 좋아요
-MIN_DURATION = 15              # 최소 영상 길이 (초)
-MAX_DURATION = 50              # 최대 영상 길이 (초)
+# 바이럴 영상 필터 기준 (완화 기본값)
+MIN_VIEW_COUNT = int(get_secret("MIN_VIEW_COUNT", "10000") or 10000)  # 최소 조회수
+MIN_LIKE_COUNT = int(get_secret("MIN_LIKE_COUNT", "200") or 200)      # 최소 좋아요
+MIN_DURATION = int(get_secret("MIN_DURATION", "5") or 5)             # 최소 영상 길이 (초)
+MAX_DURATION = int(get_secret("MAX_DURATION", "90") or 90)            # 최대 영상 길이 (초)
 
 # ──────────────────────────────────────────────
 # 영상 편집 설정
