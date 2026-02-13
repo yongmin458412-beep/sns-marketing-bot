@@ -78,6 +78,12 @@ def get_secret(key: str, default: str = "") -> str:
     return default
 
 
+def _split_csv(value: str) -> list[str]:
+    if not value:
+        return []
+    return [v.strip() for v in value.split(",") if v.strip()]
+
+
 # ──────────────────────────────────────────────
 # API Keys & Credentials
 # ──────────────────────────────────────────────
@@ -116,6 +122,29 @@ ALIEXPRESS_APP_SECRET = get_secret("ALIEXPRESS_APP_SECRET")
 ALIEXPRESS_TRACKING_ID = get_secret("ALIEXPRESS_TRACKING_ID")
 ALIEXPRESS_LANGUAGE = get_secret("ALIEXPRESS_LANGUAGE", "EN")
 ALIEXPRESS_CURRENCY = get_secret("ALIEXPRESS_CURRENCY", "USD")
+ALIEXPRESS_DEFAULT_KEYWORD = get_secret("ALIEXPRESS_DEFAULT_KEYWORD", "")
+
+# AliExpress 생활용품 키워드 풀 (자동 소싱용)
+ALIEXPRESS_KEYWORD_POOL = _split_csv(
+    get_secret(
+        "ALIEXPRESS_KEYWORD_POOL",
+        "kitchen organizer,drawer organizer,storage box,under sink organizer,"
+        "dish drying rack,silicone baking mat,food storage container,"
+        "bathroom shelf,shower caddy,soap dispenser,toothbrush holder,"
+        "microfiber cloth,cleaning brush,lint remover,mop,trash bin,"
+        "cable organizer,power strip,travel bottle,lunch box,water bottle"
+    )
+)
+
+# AliExpress 검색 결과 제외 키워드 (의류 등)
+ALIEXPRESS_EXCLUDE_KEYWORDS = _split_csv(
+    get_secret(
+        "ALIEXPRESS_EXCLUDE_KEYWORDS",
+        "dress,top,shirt,t-shirt,tee,blouse,hoodie,sweater,cardigan,jacket,coat,"
+        "pants,jeans,leggings,skirt,shorts,bra,underwear,lingerie,pajama,onesie,"
+        "원피스,상의,하의,셔츠,티셔츠,후드,니트,가디건,자켓,코트,바지,팬츠,레깅스,치마,잠옷,속옷"
+    )
+)
 
 # ──────────────────────────────────────────────
 # 크롤링 / 필터 설정
@@ -202,7 +231,6 @@ DM_TEMPLATE = """안녕하세요! 😊
 # ──────────────────────────────────────────────
 # AliExpress 기본 키워드 (자동 실행용)
 # ──────────────────────────────────────────────
-ALIEXPRESS_DEFAULT_KEYWORD = get_secret("ALIEXPRESS_DEFAULT_KEYWORD", "")
 
 # ──────────────────────────────────────────────
 # Linktree/Webhook 설정

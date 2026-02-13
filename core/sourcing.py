@@ -17,7 +17,8 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from config import (
     OPENAI_API_KEY, COUPANG_GOLDBOX_URL, COUPANG_RANKING_URL,
-    VISION_PROMPT, MAX_PRODUCTS_PER_RUN, DOWNLOADS_DIR
+    VISION_PROMPT, MAX_PRODUCTS_PER_RUN, DOWNLOADS_DIR,
+    ALIEXPRESS_EXCLUDE_KEYWORDS,
 )
 from core.database import insert_product, update_product_code
 from core.aliexpress_api import AliExpressClient
@@ -187,7 +188,32 @@ class ProductSourcer:
             logger.error("AliExpress API가 설정되지 않아 검색할 수 없습니다.")
             return []
 
-        return self.aliexpress.search_products(keyword, max_items=max_items)
+        products = self.aliexpress.search_products(keyword, max_items=max_items)
+        if not products:
+            return []
+
+        filtered = []
+        for p in products:
+            name = p.get("name", "")
+            if self._is_excluded_name(name):
+                continue
+            filtered.append(p)
+
+        if len(filtered) != len(products):
+            logger.info(
+                f"의류/제외 키워드 필터링: {len(products)}개 → {len(filtered)}개"
+            )
+        return filtered
+
+    @staticmethod
+    def _is_excluded_name(name: str) -> bool:
+        if not name:
+            return False
+        lowered = name.lower()
+        for kw in ALIEXPRESS_EXCLUDE_KEYWORDS:
+            if kw and kw.lower() in lowered:
+                return True
+        return False
 
     # ──────────────────────────────────────────
     # GPT-4o Vision 분석

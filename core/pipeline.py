@@ -12,7 +12,8 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from config import (
     MAX_PRODUCTS_PER_RUN, COMMENT_POLL_INTERVAL,
-    MAX_DAILY_PRODUCTS, ALIEXPRESS_DEFAULT_KEYWORD
+    MAX_DAILY_PRODUCTS, ALIEXPRESS_DEFAULT_KEYWORD,
+    ALIEXPRESS_KEYWORD_POOL,
 )
 from core.sourcing import ProductSourcer
 from core.mining import VideoMiner
@@ -21,7 +22,7 @@ from core.social import InstagramManager
 from core.bot import TelegramNotifier
 from core.linktree import LinktreeManager
 from core.notion_links import NotionLinkManager
-from core.trends import get_daily_trend_keyword
+from core.trends import get_daily_trend_keyword, pick_daily_from_pool
 from core.database import (
     start_run_log, finish_run_log,
     get_today_product_count,
@@ -91,7 +92,11 @@ class AutomationPipeline:
             # ── STEP 1: 상품 소싱 ──
             logger.info("\n[STEP 1/5] 상품 소싱 중...")
             if source == "aliexpress" and not keyword:
-                keyword = get_daily_trend_keyword() or ALIEXPRESS_DEFAULT_KEYWORD
+                keyword = (
+                    pick_daily_from_pool(ALIEXPRESS_KEYWORD_POOL)
+                    or get_daily_trend_keyword()
+                    or ALIEXPRESS_DEFAULT_KEYWORD
+                )
             if source == "aliexpress" and not keyword:
                 raise Exception("AliExpress 소싱 키워드가 설정되지 않았습니다.")
 
@@ -267,7 +272,11 @@ class AutomationPipeline:
             max_products = remaining
 
         if source == "aliexpress" and not keyword:
-            keyword = get_daily_trend_keyword() or ALIEXPRESS_DEFAULT_KEYWORD
+            keyword = (
+                pick_daily_from_pool(ALIEXPRESS_KEYWORD_POOL)
+                or get_daily_trend_keyword()
+                or ALIEXPRESS_DEFAULT_KEYWORD
+            )
         return await self.sourcer.run_sourcing_pipeline(
             url=url,
             source=source,

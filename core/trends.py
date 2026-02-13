@@ -35,6 +35,16 @@ def get_daily_trend_keyword() -> str:
     return rng.choice(keywords)
 
 
+def pick_daily_from_pool(pool: list[str]) -> str:
+    """고정된 키워드 풀에서 날짜 기준으로 1개 선택"""
+    pool = [p.strip() for p in pool if p and p.strip()]
+    if not pool:
+        return ""
+    today = datetime.now().strftime("%Y-%m-%d")
+    rng = random.Random(today + "|pool")
+    return rng.choice(pool)
+
+
 def get_daily_trend_keywords() -> list[str]:
     """오늘 날짜 기준 트렌드 키워드 리스트 반환 (캐시 포함)"""
     today = datetime.now().strftime("%Y-%m-%d")

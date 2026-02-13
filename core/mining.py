@@ -27,6 +27,14 @@ class VideoMiner:
     def __init__(self):
         self.download_dir = DOWNLOADS_DIR / "raw"
         self.download_dir.mkdir(parents=True, exist_ok=True)
+        self.keyword_suffixes = ["review", "unboxing", "how to use"]
+        self.stopwords = set([
+            "for", "with", "and", "or", "the", "a", "an", "of", "to",
+            "set", "sets", "pack", "pcs", "pc", "piece", "pieces",
+            "new", "hot", "best", "top", "sale", "fashion", "casual",
+            "women", "woman", "men", "man", "kids", "girls", "boys",
+            "세트", "포함", "남성", "여성", "용", "및",
+        ])
 
     # ──────────────────────────────────────────
     # YouTube Shorts 검색
@@ -271,12 +279,13 @@ class VideoMiner:
         if not keywords:
             keywords = [product_name]
 
+        search_keywords = self._build_search_keywords(keywords, product_name)
         logger.info(f"=== 영상 마이닝 시작: {product_name} ===")
-        logger.info(f"검색 키워드: {keywords}")
+        logger.info(f"검색 키워드(단순화): {search_keywords}")
 
         all_videos = []
 
-        for keyword in keywords[:3]:  # 최대 3개 키워드
+        for keyword in search_keywords[:6]:  # 최대 6개 키워드
             # YouTube Shorts 검색
             yt_results = self.search_youtube_shorts(keyword)
             all_videos.extend(yt_results)
@@ -327,6 +336,79 @@ class VideoMiner:
 
         logger.info(f"=== 마이닝 완료: {len(downloaded)}개 영상 다운로드 ===")
         return downloaded
+
+    def _build_search_keywords(self, keywords: list, product_name: str) -> list[str]:
+        bases = []
+        for kw in keywords[:5]:
+            base = self._normalize_keyword(str(kw))
+            if base:
+                bases.append(base)
+
+        # 제품명 기반 폴백
+        name_base = self._normalize_keyword(product_name)
+        if name_base:
+            bases.append(name_base)
+
+        # 중복 제거
+        seen = set()
+        unique_bases = []
+        for b in bases:
+            key = b.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            unique_bases.append(b)
+
+        # 너무 길지 않게 2~3개만 사용
+        unique_bases = unique_bases[:3] if unique_bases else []
+
+        search_keywords = []
+        for base in unique_bases:
+            search_keywords.append(base)
+            for suffix in self.keyword_suffixes:
+                search_keywords.append(f"{base} {suffix}")
+
+        # 최종 중복 제거
+        final = []
+        seen = set()
+        for k in search_keywords:
+            key = k.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            final.append(k)
+        return final
+
+    def _normalize_keyword(self, text: str) -> str:
+        if not text:
+            return ""
+        cleaned = re.sub(r"[^0-9a-zA-Z가-힣 ]+", " ", text)
+        tokens = []
+        for raw in cleaned.split():
+            t = raw.strip()
+            if not t:
+                continue
+            lower = t.lower()
+            if lower in self.stopwords:
+                continue
+            if lower.isdigit():
+                continue
+            if re.fullmatch(r"\d+(cm|mm|m|l|ml|kg|g|oz|in|inch)", lower):
+                continue
+            tokens.append(t)
+
+        # 중복 제거 + 최대 4단어
+        seen = set()
+        result = []
+        for t in tokens:
+            key = t.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            result.append(t)
+            if len(result) >= 4:
+                break
+        return " ".join(result).strip()
 
 
 # ──────────────────────────────────────────────

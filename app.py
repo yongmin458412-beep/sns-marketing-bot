@@ -24,7 +24,8 @@ from config import (
     NOTION_TOKEN, NOTION_DATABASE_ID, NOTION_PUBLIC_URL,
     IG_API_MODE, IG_USER_ID, IG_ACCESS_TOKEN,
     VIDEO_HOSTING, CLOUDINARY_CLOUD_NAME, VIDEO_PUBLIC_BASE_URL,
-    INSTAGRAM_PASSWORD
+    INSTAGRAM_PASSWORD,
+    ALIEXPRESS_KEYWORD_POOL, ALIEXPRESS_EXCLUDE_KEYWORDS
 )
 from core.database import get_stats, get_recent_logs, get_connection
 from core.pipeline import AutomationPipeline
@@ -425,6 +426,8 @@ elif page == "⚙️ 설정":
         "AliExpress App Key": "✅ 설정됨" if ALIEXPRESS_APP_KEY else "❌ 미설정",
         "AliExpress App Secret": "✅ 설정됨" if ALIEXPRESS_APP_SECRET else "❌ 미설정",
         "AliExpress Tracking ID": "✅ 설정됨" if ALIEXPRESS_TRACKING_ID else "❌ 미설정",
+        "AliExpress Keyword Pool": f"{len(ALIEXPRESS_KEYWORD_POOL)}개",
+        "AliExpress Exclude Keywords": f"{len(ALIEXPRESS_EXCLUDE_KEYWORDS)}개",
         "Daily Product Limit": f"{MAX_DAILY_PRODUCTS}개/일",
         "Linktree Mode": LINKTREE_MODE or "미설정",
         "Linktree Webhook": "✅ 설정됨" if LINKTREE_WEBHOOK_URL else "❌ 미설정",
