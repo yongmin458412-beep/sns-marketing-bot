@@ -63,6 +63,13 @@ def _read_log_tail(max_lines: int = 200) -> str:
         return "로그를 읽지 못했습니다."
 
 
+def _safe_rerun():
+    if hasattr(st, "rerun"):
+        st.rerun()
+    elif hasattr(st, "experimental_rerun"):
+        st.experimental_rerun()
+
+
 def _run_pipeline_thread(source_url, max_products, source_type,
                          ali_keyword, monitor_comments, monitor_duration):
     _setup_file_logging()
@@ -269,7 +276,7 @@ elif page == "🚀 수동 실행":
                 st.info("실행 중... (로그 실시간 표시)")
                 st.code(_read_log_tail(), language="text")
                 time.sleep(1)
-                st.experimental_rerun()
+                _safe_rerun()
             else:
                 st.success("실행 완료! (로그 확인)")
                 st.code(_read_log_tail(), language="text")
