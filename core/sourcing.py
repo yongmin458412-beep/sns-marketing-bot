@@ -23,7 +23,6 @@ from config import (
     DATA_DIR, BRAND_MODEL_ENRICH, BRAND_MODEL_CACHE_DAYS, GENERIC_KEYWORDS,
 )
 from core.database import insert_product, update_product_code
-from core.aliexpress_api import AliExpressClient
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +32,7 @@ class ProductSourcer:
 
     def __init__(self):
         self.client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
-        self.aliexpress = AliExpressClient()
+        self.aliexpress = self._init_aliexpress_client()
         self.headers = {
             "User-Agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -43,6 +42,16 @@ class ProductSourcer:
             "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
         }
         self._brand_model_cache_path = DATA_DIR / "brand_model_cache.json"
+
+    def _init_aliexpress_client(self):
+        """AliExpressClient 지연 로딩 (Streamlit import 오류 회피)"""
+        try:
+            import importlib
+            mod = importlib.import_module("core.aliexpress_api")
+            return mod.AliExpressClient()
+        except Exception as e:
+            logger.warning(f"AliExpressClient 로딩 실패: {e}")
+            return None
 
     # ──────────────────────────────────────────
     # 크롤링 (Playwright 기반)
@@ -187,7 +196,7 @@ class ProductSourcer:
             logger.error("AliExpress 검색 키워드가 비어 있습니다.")
             return []
 
-        if not self.aliexpress.is_ready():
+        if not self.aliexpress or not self.aliexpress.is_ready():
             logger.error("AliExpress API가 설정되지 않아 검색할 수 없습니다.")
             return []
 
