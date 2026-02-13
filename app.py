@@ -25,7 +25,8 @@ from config import (
     IG_API_MODE, IG_USER_ID, IG_ACCESS_TOKEN,
     VIDEO_HOSTING, CLOUDINARY_CLOUD_NAME, VIDEO_PUBLIC_BASE_URL,
     INSTAGRAM_PASSWORD,
-    ALIEXPRESS_KEYWORD_POOL, ALIEXPRESS_EXCLUDE_KEYWORDS
+    ALIEXPRESS_KEYWORD_POOL, ALIEXPRESS_EXCLUDE_KEYWORDS,
+    ALIEXPRESS_VIDEO_FIRST, VIDEO_FIRST_MIN_VIDEOS, VIDEO_FIRST_MAX_VIDEOS
 )
 from core.database import get_stats, get_recent_logs, get_connection
 from core.pipeline import AutomationPipeline
@@ -430,6 +431,9 @@ elif page == "⚙️ 설정":
         "AliExpress Tracking ID": "✅ 설정됨" if ALIEXPRESS_TRACKING_ID else "❌ 미설정",
         "AliExpress Keyword Pool": f"{len(ALIEXPRESS_KEYWORD_POOL)}개",
         "AliExpress Exclude Keywords": f"{len(ALIEXPRESS_EXCLUDE_KEYWORDS)}개",
+        "Video-First (AliExpress)": "✅" if ALIEXPRESS_VIDEO_FIRST else "❌",
+        "Video-First Min Videos": f"{VIDEO_FIRST_MIN_VIDEOS}개",
+        "Video-First Max Videos": f"{VIDEO_FIRST_MAX_VIDEOS}개",
         "Daily Product Limit": f"{MAX_DAILY_PRODUCTS}개/일",
         "Linktree Mode": LINKTREE_MODE or "미설정",
         "Linktree Webhook": "✅ 설정됨" if LINKTREE_WEBHOOK_URL else "❌ 미설정",

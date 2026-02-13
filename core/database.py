@@ -221,6 +221,17 @@ def insert_video(product_id: int, platform: str, original_url: str,
     return video_id
 
 
+def update_video_product(video_id: int, product_id: int):
+    """영상에 상품 ID 연결"""
+    conn = get_connection()
+    conn.execute(
+        "UPDATE videos SET product_id = ? WHERE id = ?",
+        (product_id, video_id)
+    )
+    conn.commit()
+    conn.close()
+
+
 def update_video_edited(video_id: int, edited_path: str):
     """편집된 영상 경로 업데이트"""
     conn = get_connection()

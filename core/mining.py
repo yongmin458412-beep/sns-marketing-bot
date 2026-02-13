@@ -337,6 +337,31 @@ class VideoMiner:
         logger.info(f"=== 마이닝 완료: {len(downloaded)}개 영상 다운로드 ===")
         return downloaded
 
+    def mine_by_keyword(self, keyword: str,
+                        max_videos: int = 5) -> list[dict]:
+        """
+        키워드 기반으로 리뷰/언박싱 영상 수집
+        Returns: 다운로드된 영상 리스트
+        """
+        if not keyword:
+            return []
+
+        pseudo_product = {
+            "id": None,
+            "name_en": keyword,
+            "keywords": [keyword],
+        }
+        return self.run_mining_pipeline(pseudo_product, max_videos=max_videos)
+
+    def infer_product_query(self, videos: list[dict], fallback: str = "") -> str:
+        """영상 제목에서 상품 검색어 추정"""
+        titles = [v.get("title", "") for v in videos if v.get("title")]
+        for title in titles[:5]:
+            candidate = self._normalize_keyword(title)
+            if candidate:
+                return candidate
+        return fallback
+
     def _build_search_keywords(self, keywords: list, product_name: str) -> list[str]:
         bases = []
         for kw in keywords[:5]:
