@@ -7,6 +7,8 @@ import streamlit as st
 import asyncio
 import json
 import logging
+import threading
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -17,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from config import (
     OPENAI_API_KEY, TELEGRAM_BOT_TOKEN, INSTAGRAM_USERNAME,
     COUPANG_GOLDBOX_URL, COUPANG_RANKING_URL,
-    MAX_PRODUCTS_PER_RUN, DATA_DIR, MAX_DAILY_PRODUCTS,
+    MAX_PRODUCTS_PER_RUN, DATA_DIR, MAX_DAILY_PRODUCTS, LOG_FILE,
     ALIEXPRESS_APP_KEY, ALIEXPRESS_APP_SECRET, ALIEXPRESS_TRACKING_ID,
     LINKTREE_MODE, LINKTREE_WEBHOOK_URL,
     TREND_SOURCE, TREND_GEO,
@@ -31,6 +33,56 @@ from config import (
 from core.database import get_stats, get_recent_logs, get_connection
 from core.pipeline import AutomationPipeline
 from core.bot import TelegramNotifier
+
+def _setup_file_logging():
+    """파일 로그 핸들러 설정 (중복 추가 방지)"""
+    root = logging.getLogger()
+    log_path = str(LOG_FILE)
+    for h in root.handlers:
+        if isinstance(h, logging.FileHandler) and getattr(h, "baseFilename", "") == log_path:
+            return
+    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    file_handler = logging.FileHandler(log_path, encoding="utf-8")
+    formatter = logging.Formatter(
+        "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    )
+    file_handler.setFormatter(formatter)
+    root.addHandler(file_handler)
+    if root.level > logging.INFO:
+        root.setLevel(logging.INFO)
+
+
+def _read_log_tail(max_lines: int = 200) -> str:
+    if not LOG_FILE.exists():
+        return "로그 파일이 없습니다."
+    try:
+        with open(LOG_FILE, "r", encoding="utf-8", errors="ignore") as f:
+            lines = f.readlines()[-max_lines:]
+        return "".join(lines).strip()
+    except Exception:
+        return "로그를 읽지 못했습니다."
+
+
+def _run_pipeline_thread(source_url, max_products, source_type,
+                         ali_keyword, monitor_comments, monitor_duration):
+    _setup_file_logging()
+    logging.getLogger(__name__).info("=== 수동 파이프라인 시작 ===")
+    pipeline = AutomationPipeline()
+    try:
+        asyncio.run(
+            pipeline.run_full_pipeline(
+                source_url=source_url,
+                max_products=max_products,
+                source=source_type,
+                keyword=ali_keyword,
+                monitor_comments=monitor_comments,
+                monitor_duration=monitor_duration
+            )
+        )
+    except Exception as e:
+        logging.getLogger(__name__).exception(f"파이프라인 스레드 오류: {e}")
+    finally:
+        logging.getLogger(__name__).info("=== 수동 파이프라인 종료 ===")
 
 # ──────────────────────────────────────────────
 # 페이지 설정
@@ -139,6 +191,8 @@ if page == "📊 대시보드":
 elif page == "🚀 수동 실행":
     st.title("🚀 수동 실행")
     st.markdown("파이프라인을 수동으로 실행합니다.")
+    if "pipeline_thread" not in st.session_state:
+        st.session_state.pipeline_thread = None
 
     # 실행 옵션
     col1, col2 = st.columns(2)
@@ -190,21 +244,36 @@ elif page == "🚀 수동 실행":
     # 전체 파이프라인 실행
     if run_mode == "전체 파이프라인":
         if st.button("🚀 전체 파이프라인 실행", type="primary", use_container_width=True):
-            with st.spinner("파이프라인 실행 중... (시간이 소요될 수 있습니다)"):
-                pipeline = AutomationPipeline()
-                result = asyncio.run(
-                    pipeline.run_full_pipeline(
-                        source_url=source_url,
-                        max_products=max_products,
-                        source=source_type,
-                        keyword=ali_keyword,
-                        monitor_comments=monitor_comments,
-                        monitor_duration=monitor_duration
-                    )
+            if st.session_state.pipeline_thread and st.session_state.pipeline_thread.is_alive():
+                st.warning("이미 파이프라인이 실행 중입니다.")
+            else:
+                thread = threading.Thread(
+                    target=_run_pipeline_thread,
+                    args=(
+                        source_url,
+                        max_products,
+                        source_type,
+                        ali_keyword,
+                        monitor_comments,
+                        monitor_duration
+                    ),
+                    daemon=True
                 )
+                st.session_state.pipeline_thread = thread
+                thread.start()
+                st.success("파이프라인 실행을 시작했습니다.")
 
-                st.success("파이프라인 실행 완료!")
-                st.json(result)
+        # 실시간 상태 표시
+        if st.session_state.pipeline_thread:
+            if st.session_state.pipeline_thread.is_alive():
+                st.info("실행 중... (로그 실시간 표시)")
+                st.code(_read_log_tail(), language="text")
+                time.sleep(1)
+                st.experimental_rerun()
+            else:
+                st.success("실행 완료! (로그 확인)")
+                st.code(_read_log_tail(), language="text")
+                st.session_state.pipeline_thread = None
 
     # 소싱만 실행
     elif run_mode == "소싱만":

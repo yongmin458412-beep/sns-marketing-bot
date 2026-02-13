@@ -15,6 +15,7 @@ DATA_DIR = BASE_DIR / "data"
 ASSETS_DIR = BASE_DIR / "assets"
 SESSIONS_DIR = BASE_DIR / "sessions"
 DOWNLOADS_DIR = BASE_DIR / "downloads"
+LOG_FILE = DATA_DIR / "pipeline.log"
 
 # 디렉토리 자동 생성
 for d in [DATA_DIR, ASSETS_DIR, SESSIONS_DIR, DOWNLOADS_DIR]:
