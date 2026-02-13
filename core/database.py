@@ -71,6 +71,8 @@ def _init_tables(conn: sqlite3.Connection):
             post_id TEXT,
             caption TEXT,
             hashtags TEXT,
+            script TEXT,
+            tts_gender TEXT,
             upload_time TIMESTAMP,
             status TEXT DEFAULT 'uploaded',
             FOREIGN KEY (product_id) REFERENCES products(id),
@@ -114,6 +116,10 @@ def _init_tables(conn: sqlite3.Connection):
         "cta_keyword": "TEXT",
         "linktree_url": "TEXT",
         "notion_url": "TEXT",
+    })
+    _ensure_columns(conn, "posts", {
+        "script": "TEXT",
+        "tts_gender": "TEXT",
     })
 
 
@@ -244,14 +250,15 @@ def update_video_edited(video_id: int, edited_path: str):
 
 
 def insert_post(product_id: int, video_id: int, post_id: str,
-                caption: str, hashtags: str) -> int:
+                caption: str, hashtags: str,
+                script: str = None, tts_gender: str = None) -> int:
     """게시물 정보 저장 후 ID 반환"""
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
-        """INSERT INTO posts (product_id, video_id, post_id, caption, hashtags, upload_time)
-           VALUES (?, ?, ?, ?, ?, ?)""",
-        (product_id, video_id, post_id, caption, hashtags, datetime.now().isoformat())
+        """INSERT INTO posts (product_id, video_id, post_id, caption, hashtags, script, tts_gender, upload_time)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (product_id, video_id, post_id, caption, hashtags, script, tts_gender, datetime.now().isoformat())
     )
     conn.commit()
     post_id_db = cursor.lastrowid

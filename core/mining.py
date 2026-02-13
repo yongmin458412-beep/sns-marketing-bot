@@ -9,6 +9,7 @@ import subprocess
 import re
 import requests
 import base64
+import hashlib
 from pathlib import Path
 from typing import Optional
 
@@ -349,17 +350,33 @@ class VideoMiner:
         try:
             DATA_DIR.mkdir(parents=True, exist_ok=True)
             path = DATA_DIR / "cookies.txt"
-            if not path.exists():
-                cleaned = re.sub(r"\s+", "", YTDLP_COOKIES_BASE64)
+            hash_path = DATA_DIR / "cookies.sha256"
+
+            cleaned = re.sub(r"\s+", "", YTDLP_COOKIES_BASE64)
+            digest = hashlib.sha256(cleaned.encode("utf-8")).hexdigest()
+            prev_digest = ""
+            if hash_path.exists():
+                try:
+                    prev_digest = hash_path.read_text().strip()
+                except Exception:
+                    prev_digest = ""
+
+            if not path.exists() or prev_digest != digest:
                 decoded = base64.b64decode(cleaned.encode("utf-8"))
                 with open(path, "wb") as f:
                     f.write(decoded)
+                try:
+                    hash_path.write_text(digest)
+                except Exception:
+                    pass
+
             try:
                 head = path.read_text(errors="ignore")[:20000]
                 if "youtube.com" not in head and ".youtube.com" not in head:
                     logger.warning("cookies.txt에 youtube.com 쿠키가 없어 보입니다.")
             except Exception:
                 pass
+
             self._cookies_path = path
             return path
         except Exception as e:

@@ -14,11 +14,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from config import (
     MAX_PRODUCTS_PER_RUN, COMMENT_POLL_INTERVAL,
     MAX_DAILY_PRODUCTS, ALIEXPRESS_DEFAULT_KEYWORD,
-    ALIEXPRESS_KEYWORD_POOL,
+    ALIEXPRESS_KEYWORD_POOL, LIFESTYLE_KEYWORD_POOL,
     ALIEXPRESS_VIDEO_FIRST, VIDEO_FIRST_MIN_VIDEOS, VIDEO_FIRST_MAX_VIDEOS,
     TREND_FALLBACK_KEYWORDS,
     BRAND_MODEL_ENRICH,
     PRODUCT_FIRST_MIN_VIDEOS, PRODUCT_FIRST_MAX_CANDIDATES,
+    DAILY_TWO_MODE, DAILY_TWO_MAX_VIDEOS_PER_PRODUCT,
 )
 from core.sourcing import ProductSourcer
 from core.mining import VideoMiner
@@ -28,7 +29,8 @@ from core.bot import TelegramNotifier
 from core.linktree import LinktreeManager
 from core.notion_links import NotionLinkManager
 from core.trends import (
-    get_daily_trend_keyword, pick_daily_from_pool, get_daily_trend_keywords
+    get_daily_trend_keyword, pick_daily_from_pool, get_daily_trend_keywords,
+    pick_daily_from_pool_key, get_daily_seasonal_keyword, get_seasonal_keyword_pool
 )
 from core.database import (
     start_run_log, finish_run_log,
@@ -97,6 +99,17 @@ class AutomationPipeline:
 
             if max_products > remaining:
                 max_products = remaining
+
+            # ── DAILY 2 VIDEOS MODE ──
+            if source == "aliexpress" and DAILY_TWO_MODE and not keyword:
+                logger.info("\n[MODE] 하루 2개(생활꿀템 + 계절용품) 모드")
+                return await self._run_daily_two_categories(
+                    run_id=run_id,
+                    stats=stats,
+                    monitor_comments=monitor_comments,
+                    monitor_duration=monitor_duration,
+                    source=source,
+                )
 
             # ── STEP 1: 소싱 or Video-First ──
             if source == "aliexpress" and ALIEXPRESS_VIDEO_FIRST:
@@ -496,7 +509,9 @@ class AutomationPipeline:
                                                 monitor_comments: bool,
                                                 monitor_duration: int,
                                                 keyword: str | None,
-                                                source: str = "aliexpress") -> dict:
+                                                source: str = "aliexpress",
+                                                max_videos: int | None = None,
+                                                finalize_log: bool = True) -> dict:
         """
         Product-First: AliExpress 상품 소싱 → 브랜드/제품명으로 영상 검색
         영상 없으면 다른 상품으로 반복
@@ -515,6 +530,9 @@ class AutomationPipeline:
             return stats
 
         max_products = min(max_products, remaining)
+
+        if max_videos is None:
+            max_videos = VIDEO_FIRST_MAX_VIDEOS
 
         while stats["products"] < max_products:
             kw = next(keyword_stream)
@@ -546,7 +564,7 @@ class AutomationPipeline:
                 logger.info(f"[STEP 2/5] 영상 검색 키워드: {video_keywords}")
                 videos = self.miner.run_mining_pipeline(
                     product,
-                    max_videos=VIDEO_FIRST_MAX_VIDEOS
+                    max_videos=max_videos
                 )
 
                 if len(videos) < PRODUCT_FIRST_MIN_VIDEOS:
@@ -670,6 +688,62 @@ class AutomationPipeline:
 
                 # 다음 상품으로 진행
                 break
+
+        if finalize_log:
+            finish_run_log(
+                run_id,
+                products=stats["products"],
+                videos=stats["videos"],
+                posts=stats["posts"],
+                dms=stats["dms"],
+                status="completed"
+            )
+        return stats
+
+    async def _run_daily_two_categories(self, run_id: int, stats: dict,
+                                        monitor_comments: bool,
+                                        monitor_duration: int,
+                                        source: str = "aliexpress") -> dict:
+        """
+        하루 2개 고정 모드:
+        1) 생활꿀템 1개
+        2) 계절용품 1개
+        """
+        lifestyle_pool = LIFESTYLE_KEYWORD_POOL or ALIEXPRESS_KEYWORD_POOL
+        seasonal_pool = get_seasonal_keyword_pool() or []
+
+        lifestyle_kw = (
+            pick_daily_from_pool_key(lifestyle_pool, "lifestyle")
+            or get_daily_trend_keyword()
+            or ALIEXPRESS_DEFAULT_KEYWORD
+        )
+        seasonal_kw = (
+            pick_daily_from_pool_key(seasonal_pool, "seasonal")
+            or get_daily_seasonal_keyword()
+            or get_daily_trend_keyword()
+            or ALIEXPRESS_DEFAULT_KEYWORD
+        )
+
+        categories = [
+            ("생활꿀템", lifestyle_kw),
+            ("계절용품", seasonal_kw),
+        ]
+
+        for label, kw in categories:
+            if not kw:
+                continue
+            logger.info(f"\n[DAILY] {label} 키워드: {kw}")
+            await self._run_product_first_video_required(
+                run_id=run_id,
+                stats=stats,
+                max_products=1,
+                monitor_comments=monitor_comments,
+                monitor_duration=monitor_duration,
+                keyword=kw,
+                source=source,
+                max_videos=DAILY_TWO_MAX_VIDEOS_PER_PRODUCT,
+                finalize_log=False,
+            )
 
         finish_run_log(
             run_id,

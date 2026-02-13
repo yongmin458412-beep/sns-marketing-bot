@@ -17,8 +17,8 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from config import (
     OPENAI_API_KEY, INSTAGRAM_USERNAME, INSTAGRAM_PASSWORD,
-    INSTAGRAM_SESSION_FILE, CAPTION_PROMPT, REPLY_TEMPLATES,
-    DM_TEMPLATE, COMMENT_POLL_INTERVAL, MAX_DM_PER_HOUR,
+    INSTAGRAM_SESSION_FILE, CAPTION_PROMPT, SCRIPT_PROMPT,
+    REPLY_TEMPLATES, DM_TEMPLATE, COMMENT_POLL_INTERVAL, MAX_DM_PER_HOUR,
     SESSIONS_DIR,
     IG_API_MODE, IG_GRAPH_API_VERSION, IG_GRAPH_HOST, IG_MESSAGE_HOST,
     IG_USER_ID, IG_ACCESS_TOKEN, IG_SHARE_TO_FEED,
@@ -294,6 +294,45 @@ class InstagramManager:
             default_hashtags = "#추천 #꿀템 #쇼핑 #리뷰 #핫딜 #가성비 #인기템 #쇼핑추천 #신상 #트렌드"
             return default_caption, default_hashtags
 
+    def generate_script(self, product_name: str) -> tuple[str, str]:
+        """
+        GPT로 대본 생성
+        Returns: (script, tts_gender)
+        """
+        try:
+            if not self.openai_client:
+                raise RuntimeError("OpenAI API 키 미설정")
+            response = self.openai_client.chat.completions.create(
+                model="gpt-4o",
+                messages=[{
+                    "role": "user",
+                    "content": SCRIPT_PROMPT.format(product_name=product_name)
+                }],
+                max_tokens=300,
+                temperature=0.8
+            )
+            raw = response.choices[0].message.content.strip()
+            if raw.startswith("```"):
+                raw = raw.strip("`").strip()
+                if raw.lower().startswith("json"):
+                    raw = raw[4:].strip()
+            data = json.loads(raw)
+            script = str(data.get("script", "")).strip()
+            tts_gender = str(data.get("tts_gender", "")).strip().lower()
+            if tts_gender not in ("male", "female"):
+                tts_gender = "female"
+            if not script:
+                raise ValueError("빈 스크립트")
+            return script, tts_gender
+        except Exception as e:
+            logger.error(f"대본 생성 실패: {e}")
+            fallback_script = (
+                f"요즘 {product_name} 때문에 불편하다는 친구 얘기 들었어.\n"
+                f"이거 하나로 바로 해결됐더라.\n"
+                "나도 써보니까 진짜 편함."
+            )
+            return fallback_script, "female"
+
     # ──────────────────────────────────────────
     # 릴스 업로드
     # ──────────────────────────────────────────
@@ -302,7 +341,8 @@ class InstagramManager:
                     product_id: int = None, video_id: int = None,
                     caption: str = None, hashtags: str = None,
                     product_code: str = "",
-                    cta_keyword: str = "") -> Optional[str]:
+                    cta_keyword: str = "",
+                    script: str = None, tts_gender: str = None) -> Optional[str]:
         """
         인스타그램 릴스 업로드
         Args:
@@ -347,6 +387,12 @@ class InstagramManager:
                 caption = caption or gen_caption
                 hashtags = hashtags or gen_hashtags
 
+            # 대본 생성
+            if not script or not tts_gender:
+                gen_script, gen_gender = self.generate_script(product_name)
+                script = script or gen_script
+                tts_gender = tts_gender or gen_gender
+
             code_line = f"코드: {product_code}" if product_code else ""
             full_caption = f"{caption}\n\n{hashtags}"
             if cta_keyword and f"'{cta_keyword}'" not in full_caption and cta_keyword not in full_caption:
@@ -372,7 +418,9 @@ class InstagramManager:
                     video_id=video_id,
                     post_id=media_id,
                     caption=caption,
-                    hashtags=hashtags
+                    hashtags=hashtags,
+                    script=script,
+                    tts_gender=tts_gender
                 )
 
             return media_id
@@ -385,7 +433,8 @@ class InstagramManager:
                            product_id: int = None, video_id: int = None,
                            caption: str = None, hashtags: str = None,
                            product_code: str = "",
-                           cta_keyword: str = "") -> Optional[str]:
+                           cta_keyword: str = "",
+                           script: str = None, tts_gender: str = None) -> Optional[str]:
         """Instagram Graph API로 릴스 업로드"""
         if not self.graph or not self.graph.is_ready():
             logger.error("Instagram Graph API 설정이 없습니다.")
@@ -406,6 +455,12 @@ class InstagramManager:
                 )
                 caption = caption or gen_caption
                 hashtags = hashtags or gen_hashtags
+
+            # 대본 생성
+            if not script or not tts_gender:
+                gen_script, gen_gender = self.generate_script(product_name)
+                script = script or gen_script
+                tts_gender = tts_gender or gen_gender
 
             code_line = f"코드: {product_code}" if product_code else ""
             full_caption = f"{caption}\n\n{hashtags}"
@@ -432,7 +487,9 @@ class InstagramManager:
                     video_id=video_id,
                     post_id=media_id,
                     caption=caption,
-                    hashtags=hashtags
+                    hashtags=hashtags,
+                    script=script,
+                    tts_gender=tts_gender
                 )
 
             return media_id

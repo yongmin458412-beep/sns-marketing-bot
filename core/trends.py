@@ -19,6 +19,10 @@ from config import (
     TREND_MAX_ITEMS,
     TREND_FALLBACK_KEYWORDS,
     ALIEXPRESS_DEFAULT_KEYWORD,
+    SEASONAL_KEYWORDS_SPRING,
+    SEASONAL_KEYWORDS_SUMMER,
+    SEASONAL_KEYWORDS_FALL,
+    SEASONAL_KEYWORDS_WINTER,
 )
 
 logger = logging.getLogger(__name__)
@@ -45,6 +49,16 @@ def pick_daily_from_pool(pool: list[str]) -> str:
     return rng.choice(pool)
 
 
+def pick_daily_from_pool_key(pool: list[str], key: str) -> str:
+    """날짜 + 키 기반으로 풀에서 1개 선택 (카테고리별 고정)"""
+    pool = [p.strip() for p in pool if p and p.strip()]
+    if not pool:
+        return ""
+    today = datetime.now().strftime("%Y-%m-%d")
+    rng = random.Random(today + "|" + (key or "key"))
+    return rng.choice(pool)
+
+
 def get_daily_trend_keywords() -> list[str]:
     """오늘 날짜 기준 트렌드 키워드 리스트 반환 (캐시 포함)"""
     today = datetime.now().strftime("%Y-%m-%d")
@@ -67,6 +81,23 @@ def get_daily_trend_keywords() -> list[str]:
 
     _save_cache(cache_path, today, keywords)
     return keywords
+
+
+def get_seasonal_keyword_pool() -> list[str]:
+    """대한민국 계절 기준 키워드 풀 반환"""
+    month = datetime.now().month
+    if month in (3, 4, 5):
+        return list(SEASONAL_KEYWORDS_SPRING)
+    if month in (6, 7, 8):
+        return list(SEASONAL_KEYWORDS_SUMMER)
+    if month in (9, 10, 11):
+        return list(SEASONAL_KEYWORDS_FALL)
+    return list(SEASONAL_KEYWORDS_WINTER)
+
+
+def get_daily_seasonal_keyword() -> str:
+    pool = get_seasonal_keyword_pool()
+    return pick_daily_from_pool_key(pool, "seasonal")
 
 
 def _fetch_google_trends() -> list[str]:

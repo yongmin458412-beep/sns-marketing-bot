@@ -140,6 +140,37 @@ ALIEXPRESS_KEYWORD_POOL = _split_csv(
     )
 )
 
+# 생활꿀템(기본은 ALIEXPRESS_KEYWORD_POOL을 그대로 사용)
+LIFESTYLE_KEYWORD_POOL = _split_csv(
+    get_secret("LIFESTYLE_KEYWORD_POOL", ",".join(ALIEXPRESS_KEYWORD_POOL))
+)
+
+# 계절용품 키워드 풀 (대한민국 계절 기준)
+SEASONAL_KEYWORDS_SPRING = _split_csv(
+    get_secret(
+        "SEASONAL_KEYWORDS_SPRING",
+        "picnic mat,cooler bag,ice pack,folding chair,camping table,tent,lantern"
+    )
+)
+SEASONAL_KEYWORDS_SUMMER = _split_csv(
+    get_secret(
+        "SEASONAL_KEYWORDS_SUMMER",
+        "portable fan,cooling towel,cooling pad,beach towel,beach bag,ice maker"
+    )
+)
+SEASONAL_KEYWORDS_FALL = _split_csv(
+    get_secret(
+        "SEASONAL_KEYWORDS_FALL",
+        "blanket,thermos,humidifier,hand warmer,windbreaker,autumn camping"
+    )
+)
+SEASONAL_KEYWORDS_WINTER = _split_csv(
+    get_secret(
+        "SEASONAL_KEYWORDS_WINTER",
+        "electric blanket,heater,hand warmer,hot water bottle,thermal cup,earmuffs"
+    )
+)
+
 # AliExpress 검색 결과 제외 키워드 (의류 등)
 ALIEXPRESS_EXCLUDE_KEYWORDS = _split_csv(
     get_secret(
@@ -219,6 +250,8 @@ VIDEO_FIRST_MIN_VIDEOS = int(get_secret("VIDEO_FIRST_MIN_VIDEOS", "4") or 4)
 VIDEO_FIRST_MAX_VIDEOS = int(get_secret("VIDEO_FIRST_MAX_VIDEOS", "5") or 5)
 PRODUCT_FIRST_MIN_VIDEOS = int(get_secret("PRODUCT_FIRST_MIN_VIDEOS", "1") or 1)
 PRODUCT_FIRST_MAX_CANDIDATES = int(get_secret("PRODUCT_FIRST_MAX_CANDIDATES", "10") or 10)
+DAILY_TWO_MODE = get_secret("DAILY_TWO_MODE", "true").lower() == "true"
+DAILY_TWO_MAX_VIDEOS_PER_PRODUCT = int(get_secret("DAILY_TWO_MAX_VIDEOS_PER_PRODUCT", "1") or 1)
 
 # ──────────────────────────────────────────────
 # 데이터베이스 설정
@@ -235,13 +268,24 @@ VISION_PROMPT = """이 제품 이미지를 분석하여 다음 정보를 JSON �
 }
 """
 
-HOOK_TEXT_PROMPT = """다음 제품에 대한 한국어 '불편 해결' 후킹 문구를 1개 만들어주세요.
+HOOK_TEXT_PROMPT = """다음 제품에 대한 한국어 '어그로성' 후킹 문구를 1개 만들어주세요.
 조건:
-- 12자 이내
-- 일상 불편을 딱 짚기
+- 18자 이내
+- 시작에 "와~" 또는 "와.." 포함
+- 과감한 반응형 표현 (예: "진짜 미쳤다", "이걸 왜 이제 알았지")
 - 느낌표 1개
-- 이모지 1개
-- 과장/허세 표현 최소화
+- 이모지는 넣지 않기
+제품명: {product_name}
+"""
+
+SCRIPT_PROMPT = """다음 제품을 소개하는 짧은 대본을 한국어로 작성해주세요.
+요구사항:
+- 3~5문장
+- 공감대: 친구/연인/부모님 중 하나의 상황을 선택
+- 연인 상황이면 여자친구/남자친구를 명확히 언급
+- 여자친구 이야기면 남자 TTS, 남자친구 이야기면 여자 TTS
+- 출력 형식은 JSON만:
+  {"scenario":"친구|여자친구|남자친구|부모님","tts_gender":"male|female","script":"..."}
 제품명: {product_name}
 """
 

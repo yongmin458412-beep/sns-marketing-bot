@@ -28,7 +28,8 @@ from config import (
     VIDEO_HOSTING, CLOUDINARY_CLOUD_NAME, VIDEO_PUBLIC_BASE_URL,
     INSTAGRAM_PASSWORD,
     ALIEXPRESS_KEYWORD_POOL, ALIEXPRESS_EXCLUDE_KEYWORDS,
-    ALIEXPRESS_VIDEO_FIRST, VIDEO_FIRST_MIN_VIDEOS, VIDEO_FIRST_MAX_VIDEOS
+    ALIEXPRESS_VIDEO_FIRST, VIDEO_FIRST_MIN_VIDEOS, VIDEO_FIRST_MAX_VIDEOS,
+    DAILY_TWO_MODE, DAILY_TWO_MAX_VIDEOS_PER_PRODUCT
 )
 from core.database import get_stats, get_recent_logs, get_connection
 from core.pipeline import AutomationPipeline
@@ -457,6 +458,8 @@ elif page == "📱 게시물 관리":
                 st.write(f"**Media ID:** {post.get('post_id', 'N/A')}")
                 st.write(f"**캡션:**\n{post.get('caption', 'N/A')}")
                 st.write(f"**해시태그:** {post.get('hashtags', 'N/A')}")
+                if post.get("script"):
+                    st.write(f"**대본({post.get('tts_gender', 'tts')}):**\n{post.get('script')}")
                 st.write(f"**상태:** {post.get('status', 'N/A')}")
 
                 # 해당 게시물의 상호작용
@@ -510,6 +513,8 @@ elif page == "⚙️ 설정":
         "Video-First (AliExpress)": "✅" if ALIEXPRESS_VIDEO_FIRST else "❌",
         "Video-First Min Videos": f"{VIDEO_FIRST_MIN_VIDEOS}개",
         "Video-First Max Videos": f"{VIDEO_FIRST_MAX_VIDEOS}개",
+        "Daily 2 Videos Mode": "✅" if DAILY_TWO_MODE else "❌",
+        "Daily Max Videos/상품": f"{DAILY_TWO_MAX_VIDEOS_PER_PRODUCT}개",
         "Daily Product Limit": f"{MAX_DAILY_PRODUCTS}개/일",
         "Linktree Mode": LINKTREE_MODE or "미설정",
         "Linktree Webhook": "✅ 설정됨" if LINKTREE_WEBHOOK_URL else "❌ 미설정",
