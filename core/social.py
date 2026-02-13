@@ -239,7 +239,9 @@ class InstagramManager:
     # GPT 캡션 생성
     # ──────────────────────────────────────────
 
-    def generate_caption(self, product_name: str) -> tuple[str, str]:
+    def generate_caption(self, product_name: str,
+                         cta_keyword: str = "",
+                         product_code: str = "") -> tuple[str, str]:
         """
         GPT로 인스타그램 릴스 캡션 + 해시태그 생성
         Returns: (caption, hashtags)
@@ -247,11 +249,17 @@ class InstagramManager:
         try:
             if not self.openai_client:
                 raise RuntimeError("OpenAI API 키 미설정")
+            cta_keyword = (cta_keyword or "정보").strip()
+            product_code = (product_code or "").strip()
             response = self.openai_client.chat.completions.create(
                 model="gpt-4o",
                 messages=[{
                     "role": "user",
-                    "content": CAPTION_PROMPT.format(product_name=product_name)
+                    "content": CAPTION_PROMPT.format(
+                        product_name=product_name,
+                        cta_keyword=cta_keyword,
+                        product_code=product_code
+                    )
                 }],
                 max_tokens=500,
                 temperature=0.8
@@ -278,9 +286,10 @@ class InstagramManager:
 
         except Exception as e:
             logger.error(f"캡션 생성 실패: {e}")
+            fallback_keyword = (cta_keyword or "정보").strip()
             default_caption = (
-                f"요즘 핫한 {product_name} 리뷰! 🔥\n"
-                f"궁금하면 댓글 달아주세요! 💬"
+                f"{product_name} 불편함, 이걸로 해결!\n"
+                f"댓글에 '{fallback_keyword}' 남기면 DM으로 알려드릴게요."
             )
             default_hashtags = "#추천 #꿀템 #쇼핑 #리뷰 #핫딜 #가성비 #인기템 #쇼핑추천 #신상 #트렌드"
             return default_caption, default_hashtags
@@ -292,7 +301,8 @@ class InstagramManager:
     def upload_reel(self, video_path: str, product_name: str = "",
                     product_id: int = None, video_id: int = None,
                     caption: str = None, hashtags: str = None,
-                    product_code: str = "") -> Optional[str]:
+                    product_code: str = "",
+                    cta_keyword: str = "") -> Optional[str]:
         """
         인스타그램 릴스 업로드
         Args:
@@ -314,6 +324,7 @@ class InstagramManager:
                 caption=caption,
                 hashtags=hashtags,
                 product_code=product_code,
+                cta_keyword=cta_keyword,
             )
 
         if not self.is_logged_in():
@@ -328,12 +339,18 @@ class InstagramManager:
         try:
             # 캡션 생성
             if not caption or not hashtags:
-                gen_caption, gen_hashtags = self.generate_caption(product_name)
+                gen_caption, gen_hashtags = self.generate_caption(
+                    product_name,
+                    cta_keyword=cta_keyword,
+                    product_code=product_code
+                )
                 caption = caption or gen_caption
                 hashtags = hashtags or gen_hashtags
 
             code_line = f"코드: {product_code}" if product_code else ""
             full_caption = f"{caption}\n\n{hashtags}"
+            if cta_keyword and f"'{cta_keyword}'" not in full_caption and cta_keyword not in full_caption:
+                full_caption = f"{full_caption}\n\n댓글에 '{cta_keyword}' 남기면 DM으로 보내드려요."
             if code_line:
                 full_caption = f"{full_caption}\n\n{code_line}"
 
@@ -367,7 +384,8 @@ class InstagramManager:
     def _upload_reel_graph(self, video_path: str, product_name: str = "",
                            product_id: int = None, video_id: int = None,
                            caption: str = None, hashtags: str = None,
-                           product_code: str = "") -> Optional[str]:
+                           product_code: str = "",
+                           cta_keyword: str = "") -> Optional[str]:
         """Instagram Graph API로 릴스 업로드"""
         if not self.graph or not self.graph.is_ready():
             logger.error("Instagram Graph API 설정이 없습니다.")
@@ -381,12 +399,18 @@ class InstagramManager:
         try:
             # 캡션 생성
             if not caption or not hashtags:
-                gen_caption, gen_hashtags = self.generate_caption(product_name)
+                gen_caption, gen_hashtags = self.generate_caption(
+                    product_name,
+                    cta_keyword=cta_keyword,
+                    product_code=product_code
+                )
                 caption = caption or gen_caption
                 hashtags = hashtags or gen_hashtags
 
             code_line = f"코드: {product_code}" if product_code else ""
             full_caption = f"{caption}\n\n{hashtags}"
+            if cta_keyword and f"'{cta_keyword}'" not in full_caption and cta_keyword not in full_caption:
+                full_caption = f"{full_caption}\n\n댓글에 '{cta_keyword}' 남기면 DM으로 보내드려요."
             if code_line:
                 full_caption = f"{full_caption}\n\n{code_line}"
 
@@ -425,6 +449,7 @@ class InstagramManager:
                          product_code: str = "",
                          affiliate_link: str = "",
                          bio_url: str = "",
+                         cta_keyword: str = "",
                          duration_minutes: int = 60) -> dict:
         """
         게시물 댓글 모니터링 및 자동 대댓글 + DM 발송
@@ -443,6 +468,7 @@ class InstagramManager:
                 product_code=product_code,
                 affiliate_link=affiliate_link,
                 bio_url=bio_url,
+                cta_keyword=cta_keyword,
                 duration_minutes=duration_minutes,
             )
 
@@ -477,8 +503,13 @@ class InstagramManager:
                         f"{comment.text[:50]}..."
                     )
 
-                    # 1. 대댓글 달기
-                    reply_text = random.choice(REPLY_TEMPLATES)
+                    # 1. 대댓글 달기 (키워드 요구 시 안내)
+                    requires_keyword = bool(cta_keyword)
+                    comment_matches = self._comment_has_keyword(comment.text, cta_keyword)
+                    if requires_keyword and not comment_matches:
+                        reply_text = f"댓글에 '{cta_keyword}' 남겨주시면 DM으로 보내드려요!"
+                    else:
+                        reply_text = random.choice(REPLY_TEMPLATES)
                     try:
                         self.client.media_comment(
                             media_id,
@@ -492,7 +523,9 @@ class InstagramManager:
 
                     # 2. DM 발송 (시간당 제한 체크)
                     dm_sent = False
-                    if self.dm_count_this_hour < MAX_DM_PER_HOUR:
+                    if self.dm_count_this_hour < MAX_DM_PER_HOUR and (
+                        not requires_keyword or comment_matches
+                    ):
                         search_token = product_code or product_name or "해당 상품"
                         bio_text = (
                             f"바이오 링크: {bio_url}"
@@ -549,6 +582,7 @@ class InstagramManager:
                                 product_code: str = "",
                                 affiliate_link: str = "",
                                 bio_url: str = "",
+                                cta_keyword: str = "",
                                 duration_minutes: int = 60) -> dict:
         """Graph API 댓글 모니터링 및 자동 응답"""
         if not self.graph or not self.graph.is_ready():
@@ -586,8 +620,13 @@ class InstagramManager:
                         f"{comment_text[:50]}..."
                     )
 
-                    # 1. 대댓글 달기
-                    reply_text = random.choice(REPLY_TEMPLATES)
+                    # 1. 대댓글 달기 (키워드 요구 시 안내)
+                    requires_keyword = bool(cta_keyword)
+                    comment_matches = self._comment_has_keyword(comment_text, cta_keyword)
+                    if requires_keyword and not comment_matches:
+                        reply_text = f"댓글에 '{cta_keyword}' 남겨주시면 DM으로 보내드려요!"
+                    else:
+                        reply_text = random.choice(REPLY_TEMPLATES)
                     try:
                         self.graph.reply_comment(comment_id, reply_text)
                         stats["replies"] += 1
@@ -597,7 +636,9 @@ class InstagramManager:
 
                     # 2. Private Reply (DM)
                     dm_sent = False
-                    if self.dm_count_this_hour < MAX_DM_PER_HOUR:
+                    if self.dm_count_this_hour < MAX_DM_PER_HOUR and (
+                        not requires_keyword or comment_matches
+                    ):
                         search_token = product_code or product_name or "해당 상품"
                         bio_text = (
                             f"바이오 링크: {bio_url}"
@@ -644,6 +685,14 @@ class InstagramManager:
             f"DM: {stats['dms']}개"
         )
         return stats
+
+    @staticmethod
+    def _comment_has_keyword(comment_text: str, cta_keyword: str) -> bool:
+        if not cta_keyword:
+            return True
+        if not comment_text:
+            return False
+        return cta_keyword.lower() in comment_text.lower()
 
     # ──────────────────────────────────────────
     # 쿠팡 파트너스 링크 생성

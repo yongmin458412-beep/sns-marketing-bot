@@ -37,6 +37,7 @@ def _init_tables(conn: sqlite3.Connection):
             affiliate_link TEXT,
             source TEXT DEFAULT 'coupang',
             product_code TEXT,
+            cta_keyword TEXT,
             linktree_url TEXT,
             notion_url TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -110,6 +111,7 @@ def _init_tables(conn: sqlite3.Connection):
 
     _ensure_columns(conn, "products", {
         "product_code": "TEXT",
+        "cta_keyword": "TEXT",
         "linktree_url": "TEXT",
         "notion_url": "TEXT",
     })
@@ -131,17 +133,18 @@ def _ensure_columns(conn: sqlite3.Connection, table: str, columns: dict):
 def insert_product(name: str, name_en: str = "", keywords: list = None,
                    image_url: str = "", price: str = "",
                    affiliate_link: str = "", source: str = "coupang",
-                   product_code: str = "", linktree_url: str = "",
+                   product_code: str = "", cta_keyword: str = "",
+                   linktree_url: str = "",
                    notion_url: str = "") -> int:
     """상품 정보 저장 후 ID 반환"""
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
         """INSERT INTO products (name, name_en, keywords, image_url, price,
-           affiliate_link, source, product_code, linktree_url, notion_url)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           affiliate_link, source, product_code, cta_keyword, linktree_url, notion_url)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (name, name_en, json.dumps(keywords or []), image_url, price,
-         affiliate_link, source, product_code, linktree_url, notion_url)
+         affiliate_link, source, product_code, cta_keyword, linktree_url, notion_url)
     )
     conn.commit()
     product_id = cursor.lastrowid

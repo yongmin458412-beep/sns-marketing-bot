@@ -151,6 +151,7 @@ class AutomationPipeline:
 
                     # STEP 4: 인스타그램 업로드
                     logger.info(f"[STEP 4/5] 인스타그램 업로드: {product_name}")
+                    cta_keyword = product.get("cta_keyword", "")
 
                     # 제휴 링크 생성
                     affiliate_link = (
@@ -194,7 +195,8 @@ class AutomationPipeline:
                             product_name=product_name,
                             product_id=product.get("id"),
                             video_id=video.get("id"),
-                            product_code=product.get("product_code", "")
+                            product_code=product.get("product_code", ""),
+                            cta_keyword=cta_keyword
                         )
 
                         if media_id:
@@ -215,6 +217,7 @@ class AutomationPipeline:
                                     product_code=product.get("product_code", ""),
                                     affiliate_link=affiliate_link,
                                     bio_url=bio_url,
+                                    cta_keyword=cta_keyword,
                                     duration_minutes=monitor_duration
                                 )
                                 stats["dms"] += engagement.get("dms", 0)

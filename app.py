@@ -300,6 +300,8 @@ elif page == "📦 상품 관리":
                 with col2:
                     if p.get("product_code"):
                         st.write(f"**제품번호:** {p.get('product_code')}")
+                    if p.get("cta_keyword"):
+                        st.write(f"**댓글키워드:** {p.get('cta_keyword')}")
                     st.write(f"**한국어명:** {p['name']}")
                     st.write(f"**영문명:** {p.get('name_en', 'N/A')}")
                     keywords = json.loads(p.get("keywords", "[]"))

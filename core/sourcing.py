@@ -342,6 +342,10 @@ class ProductSourcer:
             # 결과 병합
             product["name_en"] = analysis.get("product_name", "")
             product["keywords"] = analysis.get("keywords", [])
+            product["cta_keyword"] = self.infer_cta_keyword(
+                product.get("name_en") or product.get("name", ""),
+                product.get("keywords", [])
+            )
 
             # DB 저장
             product_id = insert_product(
@@ -351,7 +355,8 @@ class ProductSourcer:
                 image_url=product.get("image_url", ""),
                 price=product.get("price", ""),
                 affiliate_link=product.get("affiliate_link", product.get("link", "")),
-                source=product.get("source", source)
+                source=product.get("source", source),
+                cta_keyword=product.get("cta_keyword", "")
             )
             product_code = self._generate_product_code(
                 product_id,
@@ -375,6 +380,26 @@ class ProductSourcer:
     def _generate_product_code(product_id: int, source: str) -> str:
         prefix = "AE" if (source or "").lower().startswith("ali") else "CP"
         return f"{prefix}-{product_id:06d}"
+
+    @staticmethod
+    def infer_cta_keyword(product_name: str, keywords: list[str] | None = None) -> str:
+        text = f"{product_name} {' '.join(keywords or [])}".lower()
+        mapping = [
+            (["organizer", "storage", "box", "rack", "shelf", "drawer", "cabinet", "bin", "정리", "수납"], "수납"),
+            (["kitchen", "sink", "dish", "spice", "pan", "pot", "주방", "싱크", "설거지"], "주방"),
+            (["bath", "shower", "toilet", "soap", "towel", "욕실", "샤워"], "욕실"),
+            (["clean", "mop", "brush", "sponge", "dust", "lint", "청소", "먼지"], "청소"),
+            (["cable", "wire", "charger", "power", "케이블", "충전"], "케이블"),
+            (["water", "leak", "drain", "물", "물튐"], "물튐"),
+            (["heat", "warm", "insulation", "보온", "단열"], "보온"),
+            (["travel", "lunch", "bottle", "보관"], "보관"),
+            (["space", "fold", "compact", "small", "좁은", "공간", "접이"], "공간"),
+        ]
+        for keys, label in mapping:
+            for k in keys:
+                if k in text:
+                    return label
+        return "정보"
 
 
 # ──────────────────────────────────────────────
