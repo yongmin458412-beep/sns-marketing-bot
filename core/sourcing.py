@@ -368,10 +368,35 @@ class ProductSourcer:
 
         return [keyword]
 
+    def build_video_search_keywords_for_product(self, product_name: str) -> list[str]:
+        """
+        상품명에서 브랜드+제품명 기반 검색 키워드 생성
+        """
+        name = (product_name or "").strip()
+        if not name:
+            return []
+
+        if self._contains_generic_keyword(name):
+            expanded = self.expand_brand_model_keywords(name, max_items=6)
+            if expanded:
+                return expanded
+
+        return [name]
+
     @staticmethod
     def _is_generic_keyword(keyword: str) -> bool:
         key = (keyword or "").strip().lower()
         return key in [k.lower() for k in GENERIC_KEYWORDS if k]
+
+    @staticmethod
+    def _contains_generic_keyword(text: str) -> bool:
+        lowered = (text or "").lower()
+        for k in GENERIC_KEYWORDS:
+            if not k:
+                continue
+            if k.lower() in lowered:
+                return True
+        return False
 
     def _load_brand_model_cache(self, keyword: str) -> list[str]:
         try:

@@ -327,7 +327,7 @@ class VideoMiner:
         Returns: 다운로드된 영상 정보 리스트
         """
         product_id = product.get("id")
-        keywords = product.get("keywords", [])
+        keywords = product.get("video_keywords") or product.get("keywords", [])
         product_name = product.get("name_en", product.get("name", ""))
 
         if not keywords:

@@ -195,9 +195,11 @@ MAX_DM_PER_HOUR = 20           # 시간당 최대 DM 발송 수 (안전 제한)
 DAILY_RUN_COUNT = 3            # 하루 실행 횟수
 MAX_PRODUCTS_PER_RUN = 5       # 실행당 최대 처리 상품 수
 MAX_DAILY_PRODUCTS = 12        # 하루 최대 상품 소싱 수 (안전 제한)
-ALIEXPRESS_VIDEO_FIRST = get_secret("ALIEXPRESS_VIDEO_FIRST", "true").lower() == "true"
+ALIEXPRESS_VIDEO_FIRST = get_secret("ALIEXPRESS_VIDEO_FIRST", "false").lower() == "true"
 VIDEO_FIRST_MIN_VIDEOS = int(get_secret("VIDEO_FIRST_MIN_VIDEOS", "4") or 4)
 VIDEO_FIRST_MAX_VIDEOS = int(get_secret("VIDEO_FIRST_MAX_VIDEOS", "5") or 5)
+PRODUCT_FIRST_MIN_VIDEOS = int(get_secret("PRODUCT_FIRST_MIN_VIDEOS", "1") or 1)
+PRODUCT_FIRST_MAX_CANDIDATES = int(get_secret("PRODUCT_FIRST_MAX_CANDIDATES", "10") or 10)
 
 # ──────────────────────────────────────────────
 # 데이터베이스 설정
