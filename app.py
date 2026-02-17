@@ -29,7 +29,8 @@ from config import (
     INSTAGRAM_PASSWORD,
     ALIEXPRESS_KEYWORD_POOL, ALIEXPRESS_EXCLUDE_KEYWORDS,
     ALIEXPRESS_VIDEO_FIRST, VIDEO_FIRST_MIN_VIDEOS, VIDEO_FIRST_MAX_VIDEOS,
-    DAILY_TWO_MODE, DAILY_TWO_MAX_VIDEOS_PER_PRODUCT
+    DAILY_TWO_MODE, DAILY_TWO_MAX_VIDEOS_PER_PRODUCT,
+    YOUTUBE_MINING_ENABLED, TIKTOK_MINING_ENABLED
 )
 from core.database import get_stats, get_recent_logs, get_connection
 from core.pipeline import AutomationPipeline
@@ -513,6 +514,8 @@ elif page == "⚙️ 설정":
         "Video-First (AliExpress)": "✅" if ALIEXPRESS_VIDEO_FIRST else "❌",
         "Video-First Min Videos": f"{VIDEO_FIRST_MIN_VIDEOS}개",
         "Video-First Max Videos": f"{VIDEO_FIRST_MAX_VIDEOS}개",
+        "YouTube Mining": "✅" if YOUTUBE_MINING_ENABLED else "❌",
+        "TikTok Mining": "✅" if TIKTOK_MINING_ENABLED else "❌",
         "Daily 2 Videos Mode": "✅" if DAILY_TWO_MODE else "❌",
         "Daily Max Videos/상품": f"{DAILY_TWO_MAX_VIDEOS_PER_PRODUCT}개",
         "Daily Product Limit": f"{MAX_DAILY_PRODUCTS}개/일",

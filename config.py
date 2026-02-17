@@ -108,6 +108,8 @@ IG_CONTAINER_POLL_TIMEOUT = int(get_secret("IG_CONTAINER_POLL_TIMEOUT", "120") o
 IG_MINING_ENABLED = get_secret("IG_MINING_ENABLED", "true").lower() == "true"
 IG_MINING_TOP_MEDIA = get_secret("IG_MINING_TOP_MEDIA", "true").lower() == "true"
 IG_MINING_MAX_RESULTS = int(get_secret("IG_MINING_MAX_RESULTS", "6") or 6)
+YOUTUBE_MINING_ENABLED = get_secret("YOUTUBE_MINING_ENABLED", "false").lower() == "true"
+TIKTOK_MINING_ENABLED = get_secret("TIKTOK_MINING_ENABLED", "true").lower() == "true"
 
 # 영상 공개 URL 생성(그래프 API 업로드용)
 VIDEO_HOSTING = get_secret("VIDEO_HOSTING", "cloudinary")  # cloudinary | public_url | none

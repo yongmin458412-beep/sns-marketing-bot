@@ -20,6 +20,7 @@ from config import (
     DOWNLOADS_DIR,
     IG_GRAPH_API_VERSION, IG_GRAPH_HOST, IG_USER_ID, IG_ACCESS_TOKEN,
     IG_MINING_ENABLED, IG_MINING_TOP_MEDIA, IG_MINING_MAX_RESULTS,
+    YOUTUBE_MINING_ENABLED, TIKTOK_MINING_ENABLED,
     YTDLP_USER_AGENT, YTDLP_REFERER, YTDLP_EXTRACTOR_ARGS,
     YTDLP_COOKIES_FILE, YTDLP_COOKIES_BASE64, YTDLP_COOKIES_FROM_BROWSER,
     YTDLP_PROXY, YTDLP_RETRIES, YTDLP_SLEEP_INTERVAL, YTDLP_MAX_SLEEP_INTERVAL,
@@ -420,13 +421,19 @@ class VideoMiner:
         all_videos = []
 
         for keyword in search_keywords[:6]:  # 최대 6개 키워드
-            # YouTube Shorts 검색
-            yt_results = self.search_youtube_shorts(keyword)
-            all_videos.extend(yt_results)
+            # YouTube Shorts 검색 (옵션)
+            if YOUTUBE_MINING_ENABLED:
+                yt_results = self.search_youtube_shorts(keyword)
+                all_videos.extend(yt_results)
+            else:
+                logger.debug("YouTube 검색 비활성화: YOUTUBE_MINING_ENABLED=false")
 
             # TikTok 검색
-            tt_results = self.search_tiktok(keyword)
-            all_videos.extend(tt_results)
+            if TIKTOK_MINING_ENABLED:
+                tt_results = self.search_tiktok(keyword)
+                all_videos.extend(tt_results)
+            else:
+                logger.debug("TikTok 검색 비활성화: TIKTOK_MINING_ENABLED=false")
 
             # Instagram Reels 검색
             ig_results = self.search_instagram_reels(keyword)
