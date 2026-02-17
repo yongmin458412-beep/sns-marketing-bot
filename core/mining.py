@@ -37,7 +37,7 @@ class VideoMiner:
     def __init__(self):
         self.download_dir = DOWNLOADS_DIR / "raw"
         self.download_dir.mkdir(parents=True, exist_ok=True)
-        self.keyword_suffixes = ["review", "unboxing", "how to use"]
+        self.keyword_suffixes = ["리뷰"]
         self.stopwords = set([
             "for", "with", "and", "or", "the", "a", "an", "of", "to",
             "set", "sets", "pack", "pcs", "pc", "piece", "pieces",
@@ -572,51 +572,65 @@ class VideoMiner:
         return fallback
 
     def _build_search_keywords(self, keywords: list, product_name: str) -> list[str]:
-        bases = []
-        for kw in keywords[:5]:
-            base = self._normalize_keyword(str(kw))
-            if base:
-                bases.append(base)
+        raw_sources = [str(k) for k in keywords[:5] if k] + ([product_name] if product_name else [])
+        normalized_sources = []
+        for text in raw_sources:
+            normalized = self._normalize_keyword(text)
+            if normalized:
+                normalized_sources.append(normalized)
 
-        # 제품명 기반 폴백
-        name_base = self._normalize_keyword(product_name)
-        if name_base:
-            bases.append(name_base)
+        # 제품명이 없으면 빈 리스트 반환
+        if not normalized_sources:
+            return []
 
-        # 중복 제거
-        seen = set()
-        unique_bases = []
-        for b in bases:
-            key = b.lower()
-            if key in seen:
-                continue
-            seen.add(key)
-            unique_bases.append(b)
+        # 기준은 첫 번째 키워드(보통 제품명)
+        base = normalized_sources[0]
+        tokens = [t for t in base.split() if t]
 
-        # 너무 길지 않게 2~3개만 사용
-        unique_bases = unique_bases[:3] if unique_bases else []
+        variants = []
 
-        search_keywords = []
-        for base in unique_bases:
-            search_keywords.append(base)
-            for suffix in self.keyword_suffixes:
-                search_keywords.append(f"{base} {suffix}")
+        # 1) 제품명 그대로
+        variants.append(base)
+
+        # 2) 제품명 + 리뷰
+        for suffix in self.keyword_suffixes:
+            variants.append(f"{base} {suffix}")
+
+        # 3) 브랜드 + 라인 (앞 2토큰)
+        if len(tokens) >= 2:
+            variants.append(" ".join(tokens[:2]))
+
+        # 4) 모델명 토큰(숫자/하이픈 포함) + 라인+모델
+        model_tokens = [t for t in tokens if any(ch.isdigit() for ch in t)]
+        if model_tokens:
+            model = model_tokens[0]
+            variants.append(model)
+            if len(tokens) >= 2:
+                variants.append(f"{tokens[1]} {model}")
+                variants.append(f"{tokens[1]}{model}")
+
+        # 5) 보조 제품명 1개(있으면)
+        if len(normalized_sources) >= 2:
+            variants.append(normalized_sources[1])
 
         # 최종 중복 제거
         final = []
         seen = set()
-        for k in search_keywords:
-            key = k.lower()
+        for k in variants:
+            text = (k or "").strip()
+            if not text:
+                continue
+            key = text.lower()
             if key in seen:
                 continue
             seen.add(key)
-            final.append(k)
-        return final
+            final.append(text)
+        return final[:6]
 
     def _normalize_keyword(self, text: str) -> str:
         if not text:
             return ""
-        cleaned = re.sub(r"[^0-9a-zA-Z가-힣 ]+", " ", text)
+        cleaned = re.sub(r"[^0-9a-zA-Z가-힣\- ]+", " ", text)
         tokens = []
         for raw in cleaned.split():
             t = raw.strip()
