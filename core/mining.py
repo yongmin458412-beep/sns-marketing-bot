@@ -10,6 +10,7 @@ import re
 import requests
 import base64
 import hashlib
+from collections import Counter
 from pathlib import Path
 from typing import Optional
 
@@ -416,7 +417,18 @@ class VideoMiner:
 
         search_keywords = self._build_search_keywords(keywords, product_name)
         logger.info(f"=== 영상 마이닝 시작: {product_name} ===")
-        logger.info(f"검색 키워드(단순화): {search_keywords}")
+        logger.info(f"기본 검색 키워드: {search_keywords}")
+
+        # 0) 틱톡/릴스 샘플 수집 -> 검색어 보정
+        sample_videos = self._collect_platform_samples(search_keywords)
+        adaptive_keywords = self._build_adaptive_keywords(
+            product_name=product_name,
+            seed_keywords=search_keywords,
+            sample_videos=sample_videos,
+        )
+        if adaptive_keywords:
+            search_keywords = adaptive_keywords
+        logger.info(f"최종 검색 키워드(인사이트 반영): {search_keywords}")
 
         all_videos = []
 
@@ -482,6 +494,113 @@ class VideoMiner:
 
         logger.info(f"=== 마이닝 완료: {len(downloaded)}개 영상 다운로드 ===")
         return downloaded
+
+    def _collect_platform_samples(self, seed_keywords: list[str]) -> list[dict]:
+        """
+        본 검색 전에 TikTok/Reels에서 샘플을 먼저 수집
+        """
+        samples: list[dict] = []
+        for keyword in seed_keywords[:4]:
+            if TIKTOK_MINING_ENABLED:
+                tt = self.search_tiktok(keyword, max_results=8)
+                samples.extend(tt)
+                logger.info(f"[인사이트] TikTok 샘플 {len(tt)}개: {keyword}")
+            if IG_MINING_ENABLED:
+                ig = self.search_instagram_reels(keyword, max_results=8)
+                samples.extend(ig)
+                logger.info(f"[인사이트] Reels 샘플 {len(ig)}개: {keyword}")
+
+        # URL 기준 중복 제거
+        deduped: list[dict] = []
+        seen = set()
+        for item in samples:
+            url = (item.get("url") or "").strip()
+            if not url or url in seen:
+                continue
+            seen.add(url)
+            deduped.append(item)
+
+        logger.info(f"[인사이트] 총 샘플 수집: {len(deduped)}개")
+        return deduped
+
+    def _build_adaptive_keywords(self, product_name: str,
+                                 seed_keywords: list[str],
+                                 sample_videos: list[dict]) -> list[str]:
+        """
+        샘플 영상의 해시태그/제목을 분석해서 제품명 기반 검색어를 보정
+        """
+        if not seed_keywords:
+            return []
+
+        base = seed_keywords[0]
+        base_tokens = [t.lower() for t in self._normalize_keyword(base).split() if t]
+        model_tokens = [t for t in base_tokens if any(ch.isdigit() for ch in t)]
+        model_token = model_tokens[0] if model_tokens else ""
+
+        hashtag_counter: Counter[str] = Counter()
+        token_counter: Counter[str] = Counter()
+
+        for video in sample_videos:
+            title = (video.get("title") or "").strip()
+            if not title:
+                continue
+
+            for tag in re.findall(r"#([0-9a-zA-Z가-힣_]+)", title):
+                if len(tag) >= 2:
+                    hashtag_counter[tag.lower()] += 1
+
+            normalized = self._normalize_keyword(title)
+            for token in normalized.split():
+                t = token.lower()
+                if len(t) < 2:
+                    continue
+                if t in self.stopwords:
+                    continue
+                token_counter[t] += 1
+
+        top_hashtags = [k for k, _ in hashtag_counter.most_common(8)]
+        top_tokens = [k for k, _ in token_counter.most_common(8)]
+
+        if top_hashtags:
+            logger.info(f"[인사이트] 상위 해시태그: {top_hashtags[:5]}")
+        if top_tokens:
+            logger.info(f"[인사이트] 상위 토큰: {top_tokens[:5]}")
+
+        candidates: list[str] = []
+
+        # 기존 제품명 중심 검색어 유지
+        candidates.extend(seed_keywords[:4])
+
+        # 모델명 중심 보강 (예: gx-225)
+        if model_token:
+            for token in top_tokens[:4]:
+                if token == model_token:
+                    continue
+                candidates.append(f"{token} {model_token}")
+                candidates.append(f"{token}{model_token}")
+
+        # 제품 토큰과 연관 있는 해시태그 추가
+        for tag in top_hashtags:
+            if any(bt in tag for bt in base_tokens[:2]) or (model_token and model_token in tag):
+                candidates.append(tag)
+
+        # 제품명 자체가 약하면 product_name 폴백
+        normalized_product = self._normalize_keyword(product_name)
+        if normalized_product:
+            candidates.append(normalized_product)
+            candidates.append(f"{normalized_product} 리뷰")
+
+        # 중복 제거
+        final: list[str] = []
+        seen = set()
+        for text in candidates:
+            key = (text or "").strip().lower()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            final.append((text or "").strip())
+
+        return final[:8]
 
     def _ig_request(self, path: str, params: dict | None = None) -> dict:
         params = params or {}
